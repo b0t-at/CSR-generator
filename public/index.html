@@ -266,13 +266,13 @@
                     <h3>Certificate Signing Request (CSR)</h3>
                     <textarea id="csrOutput" readonly></textarea>
                     <button class="btn-secondary" onclick="downloadCSR()">Download CSR</button>
-                    <button class="btn-secondary" onclick="copyToClipboard('csrOutput')">Copy to Clipboard</button>
+                    <button class="btn-secondary" onclick="copyToClipboard('csrOutput', this)">Copy to Clipboard</button>
                 </div>
                 <div class="result-box">
                     <h3>Private Key</h3>
                     <textarea id="privateKeyOutput" readonly></textarea>
                     <button class="btn-secondary" onclick="downloadPrivateKey()">Download Private Key</button>
-                    <button class="btn-secondary" onclick="copyToClipboard('privateKeyOutput')">Copy to Clipboard</button>
+                    <button class="btn-secondary" onclick="copyToClipboard('privateKeyOutput', this)">Copy to Clipboard</button>
                     <div class="warning-box">
                         <strong>⚠️ Important:</strong> Keep your private key secure! Never share it with anyone.
                     </div>

@@ -31,7 +31,7 @@ app.use(express.json({ limit: '10mb' }));
 app.use(express.static('public'));
 
 // Apply rate limiting to API routes
-app.use('/api/', apiLimiter);
+app.use('/api', apiLimiter);
 
 // CSR Generation endpoint
 app.post('/api/generate', generateLimiter, async (req, res) => {
@@ -75,8 +75,7 @@ app.post('/api/generate', generateLimiter, async (req, res) => {
     let keys;
     if (keyType === 'ECDSA') {
       return res.status(400).json({ 
-        error: 'ECDSA key generation is not currently supported. Please use RSA.',
-        details: 'ECDSA support requires additional cryptographic libraries. Please select RSA key type.'
+        error: 'ECDSA key generation is not currently supported. Please use RSA.'
       });
     } else {
       const bits = parseInt(keySize) || 2048;
@@ -166,28 +165,37 @@ app.post('/api/generate', generateLimiter, async (req, res) => {
 
     // Subject Alternative Names
     if (subjectAltNames && subjectAltNames.length > 0) {
-      const sanExt = {
-        name: 'subjectAltName',
-        altNames: subjectAltNames.map(san => {
-          if (san.type === 'DNS') {
+      const validSANs = subjectAltNames.filter(san => san.value && san.value.trim());
+      if (validSANs.length > 0) {
+        const sanExt = {
+          name: 'subjectAltName',
+          altNames: validSANs.map(san => {
+            if (san.type === 'DNS') {
+              return { type: 2, value: san.value };
+            } else if (san.type === 'IP') {
+              return { type: 7, ip: san.value };
+            } else if (san.type === 'email') {
+              return { type: 1, value: san.value };
+            } else if (san.type === 'URI') {
+              return { type: 6, value: san.value };
+            }
             return { type: 2, value: san.value };
-          } else if (san.type === 'IP') {
-            return { type: 7, ip: san.value };
-          } else if (san.type === 'email') {
-            return { type: 1, value: san.value };
-          } else if (san.type === 'URI') {
-            return { type: 6, value: san.value };
-          }
-          return { type: 2, value: san.value };
-        })
-      };
-      extensions.push(sanExt);
+          })
+        };
+        extensions.push(sanExt);
+      }
     }
 
     // Custom Extensions
     if (customExtensions && customExtensions.length > 0) {
       customExtensions.forEach(ext => {
         if (ext.oid && ext.value) {
+          // Validate OID format
+          if (!/^[0-9\.]+$/.test(ext.oid)) {
+            return res.status(400).json({ 
+              error: `Invalid OID format: ${ext.oid}. Must contain only numbers and dots.` 
+            });
+          }
           extensions.push({
             id: ext.oid,
             critical: ext.critical || false,

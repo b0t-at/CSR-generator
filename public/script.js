@@ -114,12 +114,12 @@ function addCustomEKU() {
     
     // Validate OID format
     if (!/^[0-9\.]+$/.test(oid)) {
-        alert('Invalid OID format. Use format like 1.2.3.4.5');
+        showError('Invalid OID format. Use format like 1.2.3.4.5');
         return;
     }
     
     if (customEKUs.includes(oid)) {
-        alert('This OID is already added');
+        showError('This OID is already added');
         return;
     }
     
@@ -223,7 +223,7 @@ document.getElementById('csrForm').addEventListener('submit', async (e) => {
         submitBtn.disabled = false;
         
     } catch (error) {
-        alert('Error: ' + error.message);
+        showError(error.message);
         const submitBtn = e.target.querySelector('button[type="submit"]');
         submitBtn.textContent = 'Generate CSR';
         submitBtn.disabled = false;
@@ -259,40 +259,67 @@ function sanitizeFilename(name) {
     return name.replace(/[^a-z0-9]/gi, '_').toLowerCase();
 }
 
-async function copyToClipboard(elementId) {
+function copyToClipboard(elementId, buttonElement) {
     const element = document.getElementById(elementId);
     const text = element.value;
     
-    try {
-        // Use modern Clipboard API
-        if (navigator.clipboard && navigator.clipboard.writeText) {
-            await navigator.clipboard.writeText(text);
-        } else {
-            // Fallback for older browsers
-            element.select();
-            document.execCommand('copy');
-        }
-        
-        // Show feedback - get button from event or find it
-        const buttons = document.querySelectorAll('button');
-        let btn = null;
-        buttons.forEach(b => {
-            if (b.textContent.includes('Copy to Clipboard') && 
-                b.onclick && b.onclick.toString().includes(elementId)) {
-                btn = b;
-            }
+    // Use modern Clipboard API
+    if (navigator.clipboard && navigator.clipboard.writeText) {
+        navigator.clipboard.writeText(text).then(() => {
+            showCopyFeedback(buttonElement);
+        }).catch(err => {
+            // Try fallback
+            fallbackCopy(element, buttonElement);
         });
-        
-        if (btn) {
-            const originalText = btn.textContent;
-            btn.textContent = 'Copied!';
-            setTimeout(() => {
-                btn.textContent = originalText;
-            }, 2000);
+    } else {
+        fallbackCopy(element, buttonElement);
+    }
+}
+
+function fallbackCopy(element, buttonElement) {
+    try {
+        element.select();
+        const success = document.execCommand('copy');
+        if (success) {
+            showCopyFeedback(buttonElement);
+        } else {
+            showError('Failed to copy. Please copy manually.');
         }
     } catch (err) {
-        alert('Failed to copy to clipboard. Please copy manually.');
+        showError('Failed to copy. Please copy manually.');
     }
+}
+
+function showCopyFeedback(buttonElement) {
+    if (buttonElement) {
+        const originalText = buttonElement.textContent;
+        buttonElement.textContent = 'Copied!';
+        setTimeout(() => {
+            buttonElement.textContent = originalText;
+        }, 2000);
+    }
+}
+
+function showError(message) {
+    // Create or update error message element
+    let errorDiv = document.getElementById('global-error');
+    if (!errorDiv) {
+        errorDiv = document.createElement('div');
+        errorDiv.id = 'global-error';
+        errorDiv.className = 'error-box';
+        errorDiv.style.position = 'fixed';
+        errorDiv.style.top = '20px';
+        errorDiv.style.right = '20px';
+        errorDiv.style.zIndex = '1000';
+        errorDiv.style.maxWidth = '400px';
+        document.body.appendChild(errorDiv);
+    }
+    errorDiv.innerHTML = `<strong>Error:</strong> ${message}`;
+    errorDiv.style.display = 'block';
+    
+    setTimeout(() => {
+        errorDiv.style.display = 'none';
+    }, 5000);
 }
 
 // CSR Analyzer
