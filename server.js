@@ -36,13 +36,26 @@ app.post('/api/generate', async (req, res) => {
     if (!commonName) {
       return res.status(400).json({ error: 'Common Name (CN) is required' });
     }
+    
+    if (commonName.length > 64) {
+      return res.status(400).json({ error: 'Common Name must be 64 characters or less' });
+    }
+    
+    if (country && !/^[A-Z]{2}$/.test(country)) {
+      return res.status(400).json({ error: 'Country must be a 2-letter ISO code (e.g., US, GB)' });
+    }
+    
+    if (password && password.length < 8) {
+      return res.status(400).json({ error: 'Password must be at least 8 characters long' });
+    }
 
     // Generate key pair
     let keys;
     if (keyType === 'ECDSA') {
-      const curve = curveName || 'prime256v1';
-      keys = forge.pki.rsa.generateKeyPair({ bits: 2048 }); // Forge doesn't support ECDSA directly, use RSA
-      // Note: For production ECDSA support, consider using a different library
+      return res.status(400).json({ 
+        error: 'ECDSA key generation is not currently supported. Please use RSA.',
+        details: 'ECDSA support requires additional cryptographic libraries. Please select RSA key type.'
+      });
     } else {
       const bits = parseInt(keySize) || 2048;
       keys = forge.pki.rsa.generateKeyPair({ bits });
@@ -87,11 +100,6 @@ app.post('/api/generate', async (req, res) => {
 
     // Extended Key Usage
     if (extendedKeyUsage && extendedKeyUsage.length > 0) {
-      const ekuExt = {
-        name: 'extKeyUsage',
-        critical: false
-      };
-      
       // Map EKU selections to OIDs
       const ekuOids = extendedKeyUsage.map(eku => {
         if (eku.startsWith('1.') || eku.startsWith('2.')) {
@@ -109,7 +117,28 @@ app.post('/api/generate', async (req, res) => {
         return ekuMap[eku] || eku;
       });
       
-      ekuExt[ekuOids.length === 1 ? 'serverAuth' : 'critical'] = ekuOids.length > 1;
+      // Add proper EKU extension with mapped OIDs
+      const ekuExt = {
+        name: 'extKeyUsage',
+        critical: false
+      };
+      
+      // Add each EKU purpose
+      ekuOids.forEach((oid, index) => {
+        const purposeMap = {
+          '1.3.6.1.5.5.7.3.1': 'serverAuth',
+          '1.3.6.1.5.5.7.3.2': 'clientAuth',
+          '1.3.6.1.5.5.7.3.3': 'codeSigning',
+          '1.3.6.1.5.5.7.3.4': 'emailProtection',
+          '1.3.6.1.5.5.7.3.8': 'timeStamping',
+          '1.3.6.1.5.5.7.3.9': 'OCSPSigning'
+        };
+        const purpose = purposeMap[oid];
+        if (purpose) {
+          ekuExt[purpose] = true;
+        }
+      });
+      
       extensions.push(ekuExt);
     }
 

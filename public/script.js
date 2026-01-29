@@ -259,18 +259,40 @@ function sanitizeFilename(name) {
     return name.replace(/[^a-z0-9]/gi, '_').toLowerCase();
 }
 
-function copyToClipboard(elementId) {
+async function copyToClipboard(elementId) {
     const element = document.getElementById(elementId);
-    element.select();
-    document.execCommand('copy');
+    const text = element.value;
     
-    // Show feedback
-    const btn = event.target;
-    const originalText = btn.textContent;
-    btn.textContent = 'Copied!';
-    setTimeout(() => {
-        btn.textContent = originalText;
-    }, 2000);
+    try {
+        // Use modern Clipboard API
+        if (navigator.clipboard && navigator.clipboard.writeText) {
+            await navigator.clipboard.writeText(text);
+        } else {
+            // Fallback for older browsers
+            element.select();
+            document.execCommand('copy');
+        }
+        
+        // Show feedback - get button from event or find it
+        const buttons = document.querySelectorAll('button');
+        let btn = null;
+        buttons.forEach(b => {
+            if (b.textContent.includes('Copy to Clipboard') && 
+                b.onclick && b.onclick.toString().includes(elementId)) {
+                btn = b;
+            }
+        });
+        
+        if (btn) {
+            const originalText = btn.textContent;
+            btn.textContent = 'Copied!';
+            setTimeout(() => {
+                btn.textContent = originalText;
+            }, 2000);
+        }
+    } catch (err) {
+        alert('Failed to copy to clipboard. Please copy manually.');
+    }
 }
 
 // CSR Analyzer
