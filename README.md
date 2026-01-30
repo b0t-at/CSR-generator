@@ -198,7 +198,9 @@ Response:
 ### Security Features
 - Private keys are generated server-side with secure random number generation
 - Optional password protection using AES-256 encryption (minimum 8 characters with complexity requirements)
-- Rate limiting to prevent abuse (100 API requests per 15 min, 20 CSR generations per 15 min)
+- Rate limiting to prevent abuse:
+  - 100 API requests per 15 minutes for all endpoints (general API limit)
+  - 20 CSR generation requests per 15 minutes (stricter limit for `/api/generate` endpoint)
 - Restricted CORS configuration (configurable via ALLOWED_ORIGINS environment variable)
 - No data persistence - CSRs and keys are never stored on the server
 - All processing is done in-memory and discarded after response

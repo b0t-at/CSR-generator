@@ -91,9 +91,15 @@ function addSAN() {
             <option value="URI">URI</option>
         </select>
         <input type="text" class="san-value" placeholder="example.com">
-        <button type="button" class="btn-remove" onclick="removeSAN(this)">Remove</button>
+        <button type="button" class="btn-remove btn-remove-san">Remove</button>
     `;
     container.appendChild(entry);
+    
+    // Attach event listener to the new remove button
+    const removeBtn = entry.querySelector('.btn-remove-san');
+    removeBtn.addEventListener('click', function() {
+        removeSAN(this);
+    });
 }
 
 function removeSAN(button) {
@@ -139,11 +145,19 @@ function removeCustomEKU(oid) {
 function updateCustomEKUList() {
     const list = document.getElementById('customEKUList');
     list.innerHTML = customEKUs.map(oid => `
-        <div class="custom-eku-item">
+        <div class="custom-eku-item" data-oid="${oid}">
             <code>${oid}</code>
-            <button type="button" class="btn-remove" onclick="removeCustomEKU('${oid}')">Remove</button>
+            <button type="button" class="btn-remove btn-remove-eku">Remove</button>
         </div>
     `).join('');
+    
+    // Attach event listeners to remove buttons
+    list.querySelectorAll('.btn-remove-eku').forEach(btn => {
+        btn.addEventListener('click', function() {
+            const oid = this.closest('.custom-eku-item').dataset.oid;
+            removeCustomEKU(oid);
+        });
+    });
 }
 
 // Form submission
@@ -261,32 +275,55 @@ function sanitizeFilename(name) {
 
 function copyToClipboard(elementId, buttonElement) {
     const element = document.getElementById(elementId);
+    if (!element) {
+        showError('Unable to find the text to copy. Please copy it manually (Ctrl/Cmd+C).');
+        return;
+    }
     const text = element.value;
     
-    // Use modern Clipboard API
-    if (navigator.clipboard && navigator.clipboard.writeText) {
+    // Use modern Clipboard API when available
+    if (navigator.clipboard && typeof navigator.clipboard.writeText === 'function') {
         navigator.clipboard.writeText(text).then(() => {
             showCopyFeedback(buttonElement);
         }).catch(err => {
-            // Try fallback
-            fallbackCopy(element, buttonElement);
+            // Clipboard API is available but failed (e.g., permissions, insecure context).
+            const fallbackSucceeded = fallbackCopy(element, buttonElement);
+            if (!fallbackSucceeded) {
+                showError('Your browser blocked automatic copying. Please copy the text manually (for example, select it and press Ctrl/Cmd+C).');
+            }
         });
     } else {
-        fallbackCopy(element, buttonElement);
+        // Clipboard API not available; try deprecated fallback for older browsers.
+        const fallbackSucceeded = fallbackCopy(element, buttonElement);
+        if (!fallbackSucceeded) {
+            showError('Your browser does not support automatic copying. Please copy the text manually (for example, select it and press Ctrl/Cmd+C).');
+        }
     }
 }
 
 function fallbackCopy(element, buttonElement) {
+    if (!element) {
+        return false;
+    }
     try {
+        // If queryCommandSupported is available, check whether "copy" is supported.
+        if (typeof document.queryCommandSupported === 'function' &&
+            !document.queryCommandSupported('copy')) {
+            return false;
+        }
+        if (typeof document.execCommand !== 'function') {
+            return false;
+        }
+
         element.select();
         const success = document.execCommand('copy');
         if (success) {
             showCopyFeedback(buttonElement);
-        } else {
-            showError('Failed to copy. Please copy manually.');
+            return true;
         }
+        return false;
     } catch (err) {
-        showError('Failed to copy. Please copy manually.');
+        return false;
     }
 }
 
@@ -443,3 +480,23 @@ if (webserverCard) {
     webserverCard.classList.add('selected');
     applyTemplate(templates.webserver);
 }
+
+// Event listeners for buttons (removed from inline onclick handlers for better separation of concerns)
+document.getElementById('addSanBtn').addEventListener('click', addSAN);
+document.getElementById('addCustomEkuBtn').addEventListener('click', addCustomEKU);
+document.getElementById('downloadCsrBtn').addEventListener('click', downloadCSR);
+document.getElementById('downloadKeyBtn').addEventListener('click', downloadPrivateKey);
+document.getElementById('copyCsrBtn').addEventListener('click', function() {
+    copyToClipboard('csrOutput', this);
+});
+document.getElementById('copyKeyBtn').addEventListener('click', function() {
+    copyToClipboard('privateKeyOutput', this);
+});
+document.getElementById('analyzeCsrBtn').addEventListener('click', analyzeCSR);
+
+// Attach event listener to the initial SAN remove button
+document.querySelectorAll('#sanContainer .btn-remove-san').forEach(btn => {
+    btn.addEventListener('click', function() {
+        removeSAN(this);
+    });
+});

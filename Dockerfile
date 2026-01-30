@@ -10,6 +10,7 @@ RUN npm ci --omit=dev
 
 # Copy application files
 COPY server.js ./
+COPY healthcheck.js ./
 COPY public ./public
 
 # Create and use a non-root user for security
@@ -20,9 +21,9 @@ USER nodejs
 # Expose port
 EXPOSE 3000
 
-# Health check
+# Health check using dedicated script for better maintainability
 HEALTHCHECK --interval=30s --timeout=3s --start-period=5s --retries=3 \
-  CMD node -e "require('http').get('http://localhost:3000/api/health', (r) => {process.exit(r.statusCode === 200 ? 0 : 1)})"
+  CMD node healthcheck.js
 
 # Run the application
 CMD ["node", "server.js"]

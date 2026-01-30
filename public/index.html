@@ -114,8 +114,8 @@
                         </div>
                         <div class="form-group">
                             <label for="country">Country (C)</label>
-                            <input type="text" id="country" name="country" placeholder="US" maxlength="2" pattern="[A-Z]{2}" style="text-transform: uppercase;">
-                            <small>2-letter uppercase ISO code (e.g., US)</small>
+                            <input type="text" id="country" name="country" placeholder="US" maxlength="2" pattern="[A-Za-z]{2}" style="text-transform: uppercase;">
+                            <small>2-letter ISO code (e.g., US, DE)</small>
                         </div>
                     </div>
                     <div class="form-group">
@@ -135,10 +135,10 @@
                                 <option value="URI">URI</option>
                             </select>
                             <input type="text" class="san-value" placeholder="example.com">
-                            <button type="button" class="btn-remove" onclick="removeSAN(this)">Remove</button>
+                            <button type="button" class="btn-remove btn-remove-san">Remove</button>
                         </div>
                     </div>
-                    <button type="button" class="btn-secondary" onclick="addSAN()">+ Add SAN</button>
+                    <button type="button" class="btn-secondary" id="addSanBtn">+ Add SAN</button>
                 </div>
 
                 <div class="section">
@@ -284,8 +284,8 @@
                     <div class="form-group" style="margin-top: 1rem;">
                         <label for="customEKU">Custom EKU OID</label>
                         <div class="input-group">
-                            <input type="text" id="customEKU" placeholder="1.2.3.4.5.6" pattern="[0-9\.]+">
-                            <button type="button" class="btn-secondary" onclick="addCustomEKU()">Add Custom OID</button>
+                            <input type="text" id="customEKU" placeholder="1.2.3.4.5.6" pattern="[0-9]+(\.[0-9]+)+">
+                            <button type="button" class="btn-secondary" id="addCustomEkuBtn">Add Custom OID</button>
                         </div>
                         <div id="customEKUList"></div>
                     </div>
@@ -301,14 +301,14 @@
                 <div class="result-box">
                     <h3>Certificate Signing Request (CSR)</h3>
                     <textarea id="csrOutput" readonly spellcheck="false"></textarea>
-                    <button class="btn-secondary" onclick="downloadCSR()">Download CSR</button>
-                    <button class="btn-secondary" onclick="copyToClipboard('csrOutput', this)">Copy to Clipboard</button>
+                    <button class="btn-secondary" id="downloadCsrBtn">Download CSR</button>
+                    <button class="btn-secondary" id="copyCsrBtn">Copy to Clipboard</button>
                 </div>
                 <div class="result-box">
                     <h3>Private Key</h3>
                     <textarea id="privateKeyOutput" readonly spellcheck="false"></textarea>
-                    <button class="btn-secondary" onclick="downloadPrivateKey()">Download Private Key</button>
-                    <button class="btn-secondary" onclick="copyToClipboard('privateKeyOutput', this)">Copy to Clipboard</button>
+                    <button class="btn-secondary" id="downloadKeyBtn">Download Private Key</button>
+                    <button class="btn-secondary" id="copyKeyBtn">Copy to Clipboard</button>
                     <div class="warning-box">
                         <strong>⚠️ Important:</strong> Keep your private key secure! Never share it with anyone.
                     </div>
@@ -325,7 +325,7 @@
                     <label for="csrInput">CSR (PEM format)</label>
                     <textarea id="csrInput" rows="10" placeholder="-----BEGIN CERTIFICATE REQUEST-----&#10;...&#10;-----END CERTIFICATE REQUEST-----" spellcheck="false"></textarea>
                 </div>
-                <button class="btn-primary" onclick="analyzeCSR()">Analyze CSR</button>
+                <button class="btn-primary" id="analyzeCsrBtn">Analyze CSR</button>
             </div>
 
             <div id="analysisResult" class="section hidden">
