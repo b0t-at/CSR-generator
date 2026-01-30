@@ -226,19 +226,27 @@ small {
     background: #f8fafc;
 }
 
+.checkbox-label-header {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    margin-bottom: 0.25rem;
+}
+
 .checkbox-label input[type="checkbox"] {
-    margin-bottom: 0.5rem;
     cursor: pointer;
     width: auto;
+    margin: 0;
+    flex-shrink: 0;
 }
 
 .checkbox-label span {
     font-weight: 600;
-    margin-bottom: 0.25rem;
 }
 
 .checkbox-label small {
     margin-top: 0;
+    margin-left: 1.75rem;
 }
 
 /* SAN Entries */

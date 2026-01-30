@@ -1,11 +1,13 @@
 const express = require('express');
 const forge = require('node-forge');
 const cors = require('cors');
-const path = require('path');
 const rateLimit = require('express-rate-limit');
 
 const app = express();
 const PORT = process.env.PORT || 3000;
+
+// Trust proxy if behind reverse proxy (e.g., nginx, load balancer)
+app.set('trust proxy', 1);
 
 // Rate limiting to prevent abuse
 const apiLimiter = rateLimit({
@@ -26,8 +28,14 @@ const generateLimiter = rateLimit({
 });
 
 // Middleware
-app.use(cors());
-app.use(express.json({ limit: '10mb' }));
+// Configure CORS to only allow same-origin or specific trusted origins
+const corsOptions = {
+  origin: process.env.ALLOWED_ORIGINS ? process.env.ALLOWED_ORIGINS.split(',') : false,
+  credentials: true
+};
+app.use(cors(corsOptions));
+
+app.use(express.json({ limit: '500kb' }));
 app.use(express.static('public'));
 
 // Apply rate limiting to API routes
@@ -39,7 +47,6 @@ app.post('/api/generate', generateLimiter, async (req, res) => {
     const {
       keyType,
       keySize,
-      curveName,
       commonName,
       organization,
       organizationalUnit,
@@ -55,7 +62,7 @@ app.post('/api/generate', generateLimiter, async (req, res) => {
     } = req.body;
 
     // Validate required fields
-    if (!commonName) {
+    if (!commonName || !commonName.trim()) {
       return res.status(400).json({ error: 'Common Name (CN) is required' });
     }
     
@@ -64,11 +71,31 @@ app.post('/api/generate', generateLimiter, async (req, res) => {
     }
     
     if (country && !/^[A-Z]{2}$/.test(country)) {
-      return res.status(400).json({ error: 'Country must be a 2-letter ISO code (e.g., US, GB)' });
+      return res.status(400).json({ error: 'Country must be a 2-letter uppercase ISO code (e.g., US, GB)' });
     }
     
-    if (password && password.length < 8) {
-      return res.status(400).json({ error: 'Password must be at least 8 characters long' });
+    // Enhanced password validation
+    if (password) {
+      if (password.length < 8) {
+        return res.status(400).json({ error: 'Password must be at least 8 characters long' });
+      }
+      // Check for basic password strength
+      const hasUpperCase = /[A-Z]/.test(password);
+      const hasLowerCase = /[a-z]/.test(password);
+      const hasNumber = /[0-9]/.test(password);
+      const hasSpecialChar = /[!@#$%^&*(),.?":{}|<>]/.test(password);
+      
+      const strengthCount = [hasUpperCase, hasLowerCase, hasNumber, hasSpecialChar].filter(Boolean).length;
+      if (strengthCount < 3) {
+        return res.status(400).json({ 
+          error: 'Password must contain at least 3 of: uppercase letters, lowercase letters, numbers, special characters' 
+        });
+      }
+    }
+    
+    // Validate email format if provided
+    if (email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+      return res.status(400).json({ error: 'Invalid email address format' });
     }
 
     // Generate key pair
@@ -167,19 +194,49 @@ app.post('/api/generate', generateLimiter, async (req, res) => {
     if (subjectAltNames && subjectAltNames.length > 0) {
       const validSANs = subjectAltNames.filter(san => san.value && san.value.trim());
       if (validSANs.length > 0) {
+        // Validate SAN values based on type
+        for (const san of validSANs) {
+          const value = san.value.trim();
+          if (san.type === 'DNS') {
+            // Basic DNS validation
+            if (!/^[a-zA-Z0-9]([a-zA-Z0-9-]*[a-zA-Z0-9])?(\.[a-zA-Z0-9]([a-zA-Z0-9-]*[a-zA-Z0-9])?)*$/.test(value)) {
+              return res.status(400).json({ error: `Invalid DNS name in SAN: ${value}` });
+            }
+          } else if (san.type === 'IP') {
+            // Basic IPv4/IPv6 validation
+            const ipv4 = /^(\d{1,3}\.){3}\d{1,3}$/;
+            const ipv6 = /^([0-9a-fA-F]{0,4}:){2,7}[0-9a-fA-F]{0,4}$/;
+            if (!ipv4.test(value) && !ipv6.test(value)) {
+              return res.status(400).json({ error: `Invalid IP address in SAN: ${value}` });
+            }
+          } else if (san.type === 'email') {
+            // Validate email
+            if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value)) {
+              return res.status(400).json({ error: `Invalid email in SAN: ${value}` });
+            }
+          } else if (san.type === 'URI') {
+            // Basic URI validation
+            try {
+              new URL(value);
+            } catch {
+              return res.status(400).json({ error: `Invalid URI in SAN: ${value}` });
+            }
+          }
+        }
+        
         const sanExt = {
           name: 'subjectAltName',
           altNames: validSANs.map(san => {
             if (san.type === 'DNS') {
-              return { type: 2, value: san.value };
+              return { type: 2, value: san.value.trim() };
             } else if (san.type === 'IP') {
-              return { type: 7, ip: san.value };
+              return { type: 7, ip: san.value.trim() };
             } else if (san.type === 'email') {
-              return { type: 1, value: san.value };
+              return { type: 1, value: san.value.trim() };
             } else if (san.type === 'URI') {
-              return { type: 6, value: san.value };
+              return { type: 6, value: san.value.trim() };
             }
-            return { type: 2, value: san.value };
+            return { type: 2, value: san.value.trim() };
           })
         };
         extensions.push(sanExt);
@@ -188,12 +245,12 @@ app.post('/api/generate', generateLimiter, async (req, res) => {
 
     // Custom Extensions
     if (customExtensions && customExtensions.length > 0) {
-      customExtensions.forEach(ext => {
+      for (const ext of customExtensions) {
         if (ext.oid && ext.value) {
-          // Validate OID format
-          if (!/^[0-9\.]+$/.test(ext.oid)) {
+          // Validate OID format - must be dot-separated numbers, at least two components
+          if (!/^[0-9]+(\.[0-9]+)+$/.test(ext.oid)) {
             return res.status(400).json({ 
-              error: `Invalid OID format: ${ext.oid}. Must contain only numbers and dots.` 
+              error: `Invalid OID format: ${ext.oid}. Must be dot-separated numbers (e.g., "1.2.840.113549").` 
             });
           }
           extensions.push({
@@ -202,7 +259,7 @@ app.post('/api/generate', generateLimiter, async (req, res) => {
             value: ext.value
           });
         }
-      });
+      }
     }
 
     csr.setAttributes([{
@@ -235,9 +292,11 @@ app.post('/api/generate', generateLimiter, async (req, res) => {
 
   } catch (error) {
     console.error('CSR Generation Error:', error);
+    // Don't expose internal error details to client in production
+    const isDev = process.env.NODE_ENV === 'development';
     res.status(500).json({ 
-      error: 'Failed to generate CSR', 
-      details: error.message 
+      error: 'Failed to generate CSR',
+      ...(isDev && { details: error.message })
     });
   }
 });
@@ -312,9 +371,11 @@ app.post('/api/analyze', async (req, res) => {
 
   } catch (error) {
     console.error('CSR Analysis Error:', error);
+    // Don't expose internal error details to client in production
+    const isDev = process.env.NODE_ENV === 'development';
     res.status(500).json({ 
-      error: 'Failed to analyze CSR', 
-      details: error.message 
+      error: 'Failed to analyze CSR',
+      ...(isDev && { details: error.message })
     });
   }
 });

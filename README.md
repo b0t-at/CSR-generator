@@ -15,7 +15,7 @@ A simple yet powerful web-based Certificate Signing Request (CSR) generation too
 - **Key Generation**:
   - RSA keys (2048, 3072, 4096 bits)
   - ECDSA/Elliptic Curve support (planned for future release)
-  - Password-protected private keys (AES-256 encryption, minimum 8 characters)
+  - Password-protected private keys (AES-256 encryption; minimum 8 characters with complexity requirements, but 16+ characters or a long passphrase strongly recommended)
 
 - **Complete X.509 Field Support**:
   - Common Name (CN)
@@ -189,7 +189,7 @@ Response:
 ## Security Considerations
 
 ### Best Practices
-- ✅ Always use strong passwords (minimum 8 characters) for private key encryption
+- ✅ Always use strong passwords (minimum 8 characters with complexity, but 16+ characters or passphrases strongly recommended) for private key encryption
 - ✅ Use minimum 2048-bit RSA keys (4096 recommended for high security)
 - ✅ Store private keys securely and never share them
 - ✅ Use appropriate key usage and EKU values for your use case
@@ -197,10 +197,12 @@ Response:
 
 ### Security Features
 - Private keys are generated server-side with secure random number generation
-- Optional password protection using AES-256 encryption (minimum 8 characters)
+- Optional password protection using AES-256 encryption (minimum 8 characters with complexity requirements)
+- Rate limiting to prevent abuse (100 API requests per 15 min, 20 CSR generations per 15 min)
+- Restricted CORS configuration (configurable via ALLOWED_ORIGINS environment variable)
 - No data persistence - CSRs and keys are never stored on the server
 - All processing is done in-memory and discarded after response
-- Input validation for all fields (CN length, country code format, password strength)
+- Comprehensive input validation (CN length, country codes, email format, password strength, OID format, SAN validation)
 
 ## Technical Details
 

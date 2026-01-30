@@ -112,9 +112,9 @@ function addCustomEKU() {
     
     if (!oid) return;
     
-    // Validate OID format
-    if (!/^[0-9\.]+$/.test(oid)) {
-        showError('Invalid OID format. Use format like 1.2.3.4.5');
+    // Validate OID format: numeric components separated by dots, no leading/trailing/consecutive dots, at least two components
+    if (!/^[0-9]+(\.[0-9]+)+$/.test(oid)) {
+        showError('Invalid OID format. Use format like 1.2.3.4.5 (dot-separated numbers, at least two components)');
         return;
     }
     
@@ -327,7 +327,7 @@ async function analyzeCSR() {
     const csrInput = document.getElementById('csrInput').value.trim();
     
     if (!csrInput) {
-        alert('Please paste a CSR to analyze');
+        showError('Please paste a CSR to analyze');
         return;
     }
     
@@ -438,4 +438,8 @@ function formatFieldName(name) {
 }
 
 // Initialize with web server template selected
-document.querySelector('.template-card[data-template="webserver"]').click();
+const webserverCard = document.querySelector('.template-card[data-template="webserver"]');
+if (webserverCard) {
+    webserverCard.classList.add('selected');
+    applyTemplate(templates.webserver);
+}
