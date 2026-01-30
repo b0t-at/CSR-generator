@@ -4,6 +4,12 @@ on:
   pull_request:
     branches:
       - main
+    paths-ignore:
+      - '**.md'
+      - '.github/**'
+      - 'LICENSE'
+      - '.editorconfig'
+      - 'docs/**'
 
 jobs:
   build-and-test:

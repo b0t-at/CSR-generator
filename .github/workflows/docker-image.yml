@@ -5,6 +5,12 @@ on:
   push:
     branches:
       - main
+    paths-ignore:
+      - '**.md'
+      - '.github/**'
+      - 'LICENSE'
+      - '.editorconfig'
+      - 'docs/**'
 
 env:
   IMAGE_BASE_TAG: ${{ vars.registry_uri }}/b0t-at-public/csr-generator
