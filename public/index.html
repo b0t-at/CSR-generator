@@ -1,0 +1,345 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>CSR Generator - Professional Certificate Signing Request Tool</title>
+    <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+    <div class="container">
+        <header>
+            <h1>🔐 CSR Generator</h1>
+            <p class="subtitle">Professional Certificate Signing Request Tool with Maximum Flexibility</p>
+        </header>
+
+        <div class="tabs">
+            <button class="tab-button active" data-tab="generator">CSR Generator</button>
+            <button class="tab-button" data-tab="analyzer">CSR Analyzer</button>
+        </div>
+
+        <!-- CSR Generator Tab -->
+        <div id="generator" class="tab-content active">
+            <div class="section">
+                <h2>1. Select Template</h2>
+                <div class="template-grid">
+                    <div class="template-card" data-template="webserver">
+                        <h3>🌐 Web Server</h3>
+                        <p>SSL/TLS certificates for HTTPS websites</p>
+                        <small>Server Auth, Key Encipherment</small>
+                    </div>
+                    <div class="template-card" data-template="codesigning">
+                        <h3>📝 Code Signing</h3>
+                        <p>Sign software and applications</p>
+                        <small>Digital Signature, Code Signing</small>
+                    </div>
+                    <div class="template-card" data-template="email">
+                        <h3>📧 Email Protection</h3>
+                        <p>S/MIME email encryption and signing</p>
+                        <small>Email Protection, Digital Signature</small>
+                    </div>
+                    <div class="template-card" data-template="clientauth">
+                        <h3>👤 Client Authentication</h3>
+                        <p>Mutual TLS and client certificates</p>
+                        <small>Client Auth, Digital Signature</small>
+                    </div>
+                    <div class="template-card" data-template="custom">
+                        <h3>⚙️ Custom</h3>
+                        <p>Full control over all fields</p>
+                        <small>Configure everything manually</small>
+                    </div>
+                </div>
+            </div>
+
+            <form id="csrForm">
+                <div class="section">
+                    <h2>2. Key Configuration</h2>
+                    <div class="form-row">
+                        <div class="form-group">
+                            <label for="keyType">Key Type</label>
+                            <select id="keyType" name="keyType">
+                                <option value="RSA">RSA</option>
+                                <option value="ECDSA" disabled>ECDSA (Coming Soon)</option>
+                            </select>
+                        </div>
+                        <div class="form-group" id="keySizeGroup">
+                            <label for="keySize">Key Size (bits)</label>
+                            <select id="keySize" name="keySize">
+                                <option value="2048">2048</option>
+                                <option value="3072">3072</option>
+                                <option value="4096">4096</option>
+                            </select>
+                        </div>
+                        <div class="form-group hidden" id="curveNameGroup">
+                            <label for="curveName">Curve</label>
+                            <select id="curveName" name="curveName">
+                                <option value="prime256v1">prime256v1 (P-256)</option>
+                                <option value="secp384r1">secp384r1 (P-384)</option>
+                                <option value="secp521r1">secp521r1 (P-521)</option>
+                            </select>
+                        </div>
+                    </div>
+                    <div class="form-group">
+                        <label for="password">Private Key Password (optional)</label>
+                        <input type="password" id="password" name="password" placeholder="Leave empty for unencrypted key" autocomplete="new-password" aria-describedby="passwordHelp">
+                        <small id="passwordHelp">Recommended: Use a strong password (16+ characters or a long passphrase, ideally stored in a password manager) to protect your private key</small>
+                    </div>
+                </div>
+
+                <div class="section">
+                    <h2>3. Subject Information</h2>
+                    <div class="form-group">
+                        <label for="commonName">Common Name (CN) <span class="required">*</span></label>
+                        <input type="text" id="commonName" name="commonName" placeholder="example.com or John Doe" required>
+                        <small>For web servers: domain name (e.g., www.example.com). For email: your name.</small>
+                    </div>
+                    <div class="form-row">
+                        <div class="form-group">
+                            <label for="organization">Organization (O)</label>
+                            <input type="text" id="organization" name="organization" placeholder="Acme Corporation">
+                        </div>
+                        <div class="form-group">
+                            <label for="organizationalUnit">Organizational Unit (OU)</label>
+                            <input type="text" id="organizationalUnit" name="organizationalUnit" placeholder="IT Department">
+                        </div>
+                    </div>
+                    <div class="form-row">
+                        <div class="form-group">
+                            <label for="locality">Locality/City (L)</label>
+                            <input type="text" id="locality" name="locality" placeholder="San Francisco">
+                        </div>
+                        <div class="form-group">
+                            <label for="state">State/Province (ST)</label>
+                            <input type="text" id="state" name="state" placeholder="California">
+                        </div>
+                        <div class="form-group">
+                            <label for="country">Country (C)</label>
+                            <input type="text" id="country" name="country" placeholder="US" maxlength="2" pattern="[A-Z]{2}" style="text-transform: uppercase;">
+                            <small>2-letter uppercase ISO code (e.g., US)</small>
+                        </div>
+                    </div>
+                    <div class="form-group">
+                        <label for="email">Email Address</label>
+                        <input type="email" id="email" name="email" placeholder="admin@example.com">
+                    </div>
+                </div>
+
+                <div class="section">
+                    <h2>4. Subject Alternative Names (SAN)</h2>
+                    <div id="sanContainer">
+                        <div class="san-entry">
+                            <select class="san-type">
+                                <option value="DNS">DNS</option>
+                                <option value="IP">IP Address</option>
+                                <option value="email">Email</option>
+                                <option value="URI">URI</option>
+                            </select>
+                            <input type="text" class="san-value" placeholder="example.com">
+                            <button type="button" class="btn-remove" onclick="removeSAN(this)">Remove</button>
+                        </div>
+                    </div>
+                    <button type="button" class="btn-secondary" onclick="addSAN()">+ Add SAN</button>
+                </div>
+
+                <div class="section">
+                    <h2>5. Key Usage</h2>
+                    <div class="checkbox-grid">
+                        <label class="checkbox-label">
+                            <div class="checkbox-label-header">
+                                <input type="checkbox" name="keyUsage" value="digitalSignature">
+                                <span>Digital Signature</span>
+                            </div>
+                            <small>Verify digital signatures (non-repudiation)</small>
+                        </label>
+                        <label class="checkbox-label">
+                            <div class="checkbox-label-header">
+                                <input type="checkbox" name="keyUsage" value="nonRepudiation">
+                                <span>Non-Repudiation</span>
+                            </div>
+                            <small>Content commitment</small>
+                        </label>
+                        <label class="checkbox-label">
+                            <div class="checkbox-label-header">
+                                <input type="checkbox" name="keyUsage" value="keyEncipherment">
+                                <span>Key Encipherment</span>
+                            </div>
+                            <small>Encrypt keys (RSA key transport)</small>
+                        </label>
+                        <label class="checkbox-label">
+                            <div class="checkbox-label-header">
+                                <input type="checkbox" name="keyUsage" value="dataEncipherment">
+                                <span>Data Encipherment</span>
+                            </div>
+                            <small>Encrypt user data directly</small>
+                        </label>
+                        <label class="checkbox-label">
+                            <div class="checkbox-label-header">
+                                <input type="checkbox" name="keyUsage" value="keyAgreement">
+                                <span>Key Agreement</span>
+                            </div>
+                            <small>Key exchange (Diffie-Hellman)</small>
+                        </label>
+                        <label class="checkbox-label">
+                            <div class="checkbox-label-header">
+                                <input type="checkbox" name="keyUsage" value="keyCertSign">
+                                <span>Key Certificate Sign</span>
+                            </div>
+                            <small>Sign certificates (CA only)</small>
+                        </label>
+                        <label class="checkbox-label">
+                            <div class="checkbox-label-header">
+                                <input type="checkbox" name="keyUsage" value="cRLSign">
+                                <span>CRL Sign</span>
+                            </div>
+                            <small>Sign certificate revocation lists</small>
+                        </label>
+                        <label class="checkbox-label">
+                            <div class="checkbox-label-header">
+                                <input type="checkbox" name="keyUsage" value="encipherOnly">
+                                <span>Encipher Only</span>
+                            </div>
+                            <small>Only for encryption (with keyAgreement)</small>
+                        </label>
+                        <label class="checkbox-label">
+                            <div class="checkbox-label-header">
+                                <input type="checkbox" name="keyUsage" value="decipherOnly">
+                                <span>Decipher Only</span>
+                            </div>
+                            <small>Only for decryption (with keyAgreement)</small>
+                        </label>
+                    </div>
+                </div>
+
+                <div class="section">
+                    <h2>6. Extended Key Usage (EKU)</h2>
+                    <div class="info-box">
+                        <p>Select from predefined EKUs or add custom OIDs below</p>
+                    </div>
+                    <div class="checkbox-grid">
+                        <label class="checkbox-label">
+                            <div class="checkbox-label-header">
+                                <input type="checkbox" name="extendedKeyUsage" value="serverAuth">
+                                <span>TLS Web Server Authentication</span>
+                            </div>
+                            <small>1.3.6.1.5.5.7.3.1</small>
+                        </label>
+                        <label class="checkbox-label">
+                            <div class="checkbox-label-header">
+                                <input type="checkbox" name="extendedKeyUsage" value="clientAuth">
+                                <span>TLS Web Client Authentication</span>
+                            </div>
+                            <small>1.3.6.1.5.5.7.3.2</small>
+                        </label>
+                        <label class="checkbox-label">
+                            <div class="checkbox-label-header">
+                                <input type="checkbox" name="extendedKeyUsage" value="codeSigning">
+                                <span>Code Signing</span>
+                            </div>
+                            <small>1.3.6.1.5.5.7.3.3</small>
+                        </label>
+                        <label class="checkbox-label">
+                            <div class="checkbox-label-header">
+                                <input type="checkbox" name="extendedKeyUsage" value="emailProtection">
+                                <span>Email Protection (S/MIME)</span>
+                            </div>
+                            <small>1.3.6.1.5.5.7.3.4</small>
+                        </label>
+                        <label class="checkbox-label">
+                            <div class="checkbox-label-header">
+                                <input type="checkbox" name="extendedKeyUsage" value="timeStamping">
+                                <span>Time Stamping</span>
+                            </div>
+                            <small>1.3.6.1.5.5.7.3.8</small>
+                        </label>
+                        <label class="checkbox-label">
+                            <div class="checkbox-label-header">
+                                <input type="checkbox" name="extendedKeyUsage" value="OCSPSigning">
+                                <span>OCSP Signing</span>
+                            </div>
+                            <small>1.3.6.1.5.5.7.3.9</small>
+                        </label>
+                        <label class="checkbox-label">
+                            <div class="checkbox-label-header">
+                                <input type="checkbox" name="extendedKeyUsage" value="1.3.6.1.4.1.311.10.3.12">
+                                <span>Document Signing</span>
+                            </div>
+                            <small>1.3.6.1.4.1.311.10.3.12</small>
+                        </label>
+                        <label class="checkbox-label">
+                            <div class="checkbox-label-header">
+                                <input type="checkbox" name="extendedKeyUsage" value="1.3.6.1.4.1.311.20.2.2">
+                                <span>Smart Card Logon</span>
+                            </div>
+                            <small>1.3.6.1.4.1.311.20.2.2</small>
+                        </label>
+                        <label class="checkbox-label">
+                            <div class="checkbox-label-header">
+                                <input type="checkbox" name="extendedKeyUsage" value="1.3.6.1.5.5.7.3.17">
+                                <span>IP Security IKE</span>
+                            </div>
+                            <small>1.3.6.1.5.5.7.3.17</small>
+                        </label>
+                    </div>
+                    
+                    <div class="form-group" style="margin-top: 1rem;">
+                        <label for="customEKU">Custom EKU OID</label>
+                        <div class="input-group">
+                            <input type="text" id="customEKU" placeholder="1.2.3.4.5.6" pattern="[0-9\.]+">
+                            <button type="button" class="btn-secondary" onclick="addCustomEKU()">Add Custom OID</button>
+                        </div>
+                        <div id="customEKUList"></div>
+                    </div>
+                </div>
+
+                <div class="section">
+                    <button type="submit" class="btn-primary">Generate CSR</button>
+                </div>
+            </form>
+
+            <div id="resultSection" class="section hidden">
+                <h2>Generated CSR and Private Key</h2>
+                <div class="result-box">
+                    <h3>Certificate Signing Request (CSR)</h3>
+                    <textarea id="csrOutput" readonly spellcheck="false"></textarea>
+                    <button class="btn-secondary" onclick="downloadCSR()">Download CSR</button>
+                    <button class="btn-secondary" onclick="copyToClipboard('csrOutput', this)">Copy to Clipboard</button>
+                </div>
+                <div class="result-box">
+                    <h3>Private Key</h3>
+                    <textarea id="privateKeyOutput" readonly spellcheck="false"></textarea>
+                    <button class="btn-secondary" onclick="downloadPrivateKey()">Download Private Key</button>
+                    <button class="btn-secondary" onclick="copyToClipboard('privateKeyOutput', this)">Copy to Clipboard</button>
+                    <div class="warning-box">
+                        <strong>⚠️ Important:</strong> Keep your private key secure! Never share it with anyone.
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- CSR Analyzer Tab -->
+        <div id="analyzer" class="tab-content">
+            <div class="section">
+                <h2>Analyze Certificate Signing Request</h2>
+                <p>Paste your CSR below to decode and analyze its contents</p>
+                <div class="form-group">
+                    <label for="csrInput">CSR (PEM format)</label>
+                    <textarea id="csrInput" rows="10" placeholder="-----BEGIN CERTIFICATE REQUEST-----&#10;...&#10;-----END CERTIFICATE REQUEST-----" spellcheck="false"></textarea>
+                </div>
+                <button class="btn-primary" onclick="analyzeCSR()">Analyze CSR</button>
+            </div>
+
+            <div id="analysisResult" class="section hidden">
+                <h2>Analysis Results</h2>
+                <div id="analysisContent"></div>
+            </div>
+        </div>
+    </div>
+
+    <footer>
+        <p>CSR Generator v1.0 | Secure, Open Source, Self-Hosted</p>
+        <p><small>Private keys are generated securely and never stored on the server</small></p>
+    </footer>
+
+    <script src="script.js"></script>
+</body>
+</html>
