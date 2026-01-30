@@ -1,7 +1,290 @@
 const express = require('express');
-const forge = require('node-forge');
 const cors = require('cors');
 const rateLimit = require('express-rate-limit');
+const crypto = require('node:crypto');
+const x509 = require('@peculiar/x509');
+
+// Set crypto provider for @peculiar/x509
+x509.cryptoProvider.set(crypto.webcrypto);
+
+// ============================================================================
+// Validation Helper Functions
+// ============================================================================
+
+function validateCommonName(commonName) {
+  if (!commonName?.trim()) {
+    return { valid: false, error: 'Common Name (CN) is required' };
+  }
+  if (commonName.length > 64) {
+    return { valid: false, error: 'Common Name must be 64 characters or less' };
+  }
+  return { valid: true };
+}
+
+function validateCountry(country) {
+  if (country && !/^[A-Z]{2}$/.test(country)) {
+    return { valid: false, error: 'Country must be a 2-letter uppercase ISO code (e.g., US, GB)' };
+  }
+  return { valid: true };
+}
+
+function validatePassword(password) {
+  if (!password) return { valid: true };
+  
+  if (password.length < 8) {
+    return { valid: false, error: 'Password must be at least 8 characters long' };
+  }
+  
+  const hasUpperCase = /[A-Z]/.test(password);
+  const hasLowerCase = /[a-z]/.test(password);
+  const hasNumber = /\d/.test(password);
+  const hasSpecialChar = /[!@#$%^&*(),.?":{}|<>]/.test(password);
+  
+  const strengthCount = [hasUpperCase, hasLowerCase, hasNumber, hasSpecialChar].filter(Boolean).length;
+  if (strengthCount < 3) {
+    return { 
+      valid: false, 
+      error: 'Password must contain at least 3 of: uppercase letters, lowercase letters, numbers, special characters' 
+    };
+  }
+  return { valid: true };
+}
+
+function validateEmail(email) {
+  if (email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+    return { valid: false, error: 'Invalid email address format' };
+  }
+  return { valid: true };
+}
+
+function validateSAN(san) {
+  const value = san.value.trim();
+  
+  if (san.type === 'DNS') {
+    if (!/^[a-zA-Z0-9*]([a-zA-Z0-9-]*[a-zA-Z0-9])?(\.[a-zA-Z0-9]([a-zA-Z0-9-]*[a-zA-Z0-9])?)*$/.test(value)) {
+      return { valid: false, error: `Invalid DNS name in SAN: ${value}` };
+    }
+  } else if (san.type === 'IP') {
+    const ipv4 = /^(\d{1,3}\.){3}\d{1,3}$/;
+    const ipv6 = /^([0-9a-fA-F]{0,4}:){2,7}[0-9a-fA-F]{0,4}$/;
+    if (!ipv4.test(value) && !ipv6.test(value)) {
+      return { valid: false, error: `Invalid IP address in SAN: ${value}` };
+    }
+  } else if (san.type === 'email') {
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value)) {
+      return { valid: false, error: `Invalid email in SAN: ${value}` };
+    }
+  } else if (san.type === 'URI') {
+    try { 
+      new URL(value); 
+    } catch { 
+      return { valid: false, error: `Invalid URI in SAN: ${value}` }; 
+    }
+  }
+  return { valid: true };
+}
+
+// ============================================================================
+// Key Generation Helper Functions
+// ============================================================================
+
+async function generateKeyPair(keyType, keySize, curveName) {
+  if (keyType === 'ECDSA') {
+    const curveMap = {
+      'prime256v1': 'P-256', 'secp384r1': 'P-384', 'secp521r1': 'P-521',
+      'P-256': 'P-256', 'P-384': 'P-384', 'P-521': 'P-521'
+    };
+    const curve = curveMap[curveName] || 'P-256';
+    
+    const keys = await crypto.webcrypto.subtle.generateKey(
+      { name: 'ECDSA', namedCurve: curve },
+      true,
+      ['sign', 'verify']
+    );
+    return { keys, signingAlgorithm: { name: 'ECDSA', namedCurve: curve, hash: 'SHA-256' } };
+  }
+  
+  // RSA
+  const bits = Number.parseInt(keySize) || 2048;
+  const keys = await crypto.webcrypto.subtle.generateKey(
+    {
+      name: 'RSASSA-PKCS1-v1_5',
+      modulusLength: bits,
+      publicExponent: new Uint8Array([1, 0, 1]),
+      hash: 'SHA-256'
+    },
+    true,
+    ['sign', 'verify']
+  );
+  return { keys, signingAlgorithm: { name: 'RSASSA-PKCS1-v1_5', hash: 'SHA-256' } };
+}
+
+// ============================================================================
+// CSR Building Helper Functions
+// ============================================================================
+
+function buildSubjectDN({ country, state, locality, organization, organizationalUnit, commonName, email }) {
+  const subjectParts = [];
+  if (country) subjectParts.push(`C=${country}`);
+  if (state) subjectParts.push(`ST=${state}`);
+  if (locality) subjectParts.push(`L=${locality}`);
+  if (organization) subjectParts.push(`O=${organization}`);
+  if (organizationalUnit) subjectParts.push(`OU=${organizationalUnit}`);
+  subjectParts.push(`CN=${commonName}`);
+  if (email) subjectParts.push(`E=${email}`);
+  return subjectParts.join(', ');
+}
+
+function buildKeyUsageExtension(keyUsage) {
+  const flagMap = {
+    'digitalSignature': x509.KeyUsageFlags.digitalSignature,
+    'nonRepudiation': x509.KeyUsageFlags.nonRepudiation,
+    'keyEncipherment': x509.KeyUsageFlags.keyEncipherment,
+    'dataEncipherment': x509.KeyUsageFlags.dataEncipherment,
+    'keyAgreement': x509.KeyUsageFlags.keyAgreement,
+    'keyCertSign': x509.KeyUsageFlags.keyCertSign,
+    'cRLSign': x509.KeyUsageFlags.cRLSign,
+    'encipherOnly': x509.KeyUsageFlags.encipherOnly,
+    'decipherOnly': x509.KeyUsageFlags.decipherOnly
+  };
+  
+  let flags = 0;
+  for (const usage of keyUsage) {
+    if (flagMap[usage]) flags |= flagMap[usage];
+  }
+  return new x509.KeyUsagesExtension(flags, true);
+}
+
+function buildExtendedKeyUsageExtension(extendedKeyUsage) {
+  const ekuMap = {
+    'serverAuth': '1.3.6.1.5.5.7.3.1',
+    'clientAuth': '1.3.6.1.5.5.7.3.2',
+    'codeSigning': '1.3.6.1.5.5.7.3.3',
+    'emailProtection': '1.3.6.1.5.5.7.3.4',
+    'timeStamping': '1.3.6.1.5.5.7.3.8',
+    'OCSPSigning': '1.3.6.1.5.5.7.3.9'
+  };
+  
+  const ekuOids = extendedKeyUsage.map(eku => {
+    if (eku.startsWith('1.') || eku.startsWith('2.')) return eku;
+    return ekuMap[eku] || eku;
+  });
+  return new x509.ExtendedKeyUsageExtension(ekuOids, false);
+}
+
+function buildSANExtension(validSANs) {
+  const typeMap = { 'DNS': 'dns', 'IP': 'ip', 'email': 'email', 'URI': 'url' };
+  const sanEntries = validSANs.map(san => ({
+    type: typeMap[san.type] || 'dns',
+    value: san.value.trim()
+  }));
+  return new x509.SubjectAlternativeNameExtension(sanEntries, false);
+}
+
+async function exportKeysToPem(keys, password) {
+  const privateKeyPkcs8 = await crypto.webcrypto.subtle.exportKey('pkcs8', keys.privateKey);
+  const publicKeySpki = await crypto.webcrypto.subtle.exportKey('spki', keys.publicKey);
+  
+  let privateKeyPem = '-----BEGIN PRIVATE KEY-----\n' +
+    Buffer.from(privateKeyPkcs8).toString('base64').match(/.{1,64}/g).join('\n') +
+    '\n-----END PRIVATE KEY-----';
+  
+  const publicKeyPem = '-----BEGIN PUBLIC KEY-----\n' +
+    Buffer.from(publicKeySpki).toString('base64').match(/.{1,64}/g).join('\n') +
+    '\n-----END PUBLIC KEY-----';
+  
+  if (password) {
+    const keyObject = crypto.createPrivateKey({
+      key: Buffer.from(privateKeyPkcs8),
+      format: 'der',
+      type: 'pkcs8'
+    });
+    privateKeyPem = keyObject.export({
+      type: 'pkcs8',
+      format: 'pem',
+      cipher: 'aes-256-cbc',
+      passphrase: password
+    });
+  }
+  
+  return { privateKeyPem, publicKeyPem };
+}
+
+// ============================================================================
+// CSR Analysis Helper Functions
+// ============================================================================
+
+function parseSubjectDN(subjectName) {
+  const subject = {};
+  const keyMap = {
+    'CN': 'commonName', 'O': 'organizationName', 'OU': 'organizationalUnitName',
+    'L': 'localityName', 'ST': 'stateOrProvinceName', 'C': 'countryName', 'E': 'emailAddress'
+  };
+  
+  const dnParts = subjectName.split(',').map(p => p.trim());
+  for (const part of dnParts) {
+    const [key, ...valueParts] = part.split('=');
+    const value = valueParts.join('=');
+    const normalizedKey = keyMap[key.trim()] || key.trim();
+    if (value) subject[normalizedKey] = value.trim();
+  }
+  return subject;
+}
+
+function extractPublicKeyInfo(publicKeyAlgorithm) {
+  if (publicKeyAlgorithm.name === 'RSASSA-PKCS1-v1_5' || publicKeyAlgorithm.name === 'RSA-PSS') {
+    return { type: 'RSA', bits: publicKeyAlgorithm.modulusLength || 0 };
+  }
+  if (publicKeyAlgorithm.name === 'ECDSA') {
+    const curveMap = { 'P-256': 256, 'P-384': 384, 'P-521': 521 };
+    return {
+      type: 'ECDSA',
+      curve: publicKeyAlgorithm.namedCurve,
+      bits: curveMap[publicKeyAlgorithm.namedCurve] || 0
+    };
+  }
+  return { type: 'Unknown', bits: 0 };
+}
+
+function extractKeyUsageFromExtension(ext) {
+  const usages = [];
+  const flagMap = [
+    ['digitalSignature', x509.KeyUsageFlags.digitalSignature],
+    ['nonRepudiation', x509.KeyUsageFlags.nonRepudiation],
+    ['keyEncipherment', x509.KeyUsageFlags.keyEncipherment],
+    ['dataEncipherment', x509.KeyUsageFlags.dataEncipherment],
+    ['keyAgreement', x509.KeyUsageFlags.keyAgreement],
+    ['keyCertSign', x509.KeyUsageFlags.keyCertSign],
+    ['cRLSign', x509.KeyUsageFlags.cRLSign],
+    ['encipherOnly', x509.KeyUsageFlags.encipherOnly],
+    ['decipherOnly', x509.KeyUsageFlags.decipherOnly]
+  ];
+  
+  for (const [name, flag] of flagMap) {
+    if (ext.usages & flag) usages.push(name);
+  }
+  return usages;
+}
+
+function extractExtensions(csrExtensions) {
+  const extensions = {};
+  
+  for (const ext of csrExtensions) {
+    if (ext instanceof x509.KeyUsagesExtension) {
+      extensions.keyUsage = extractKeyUsageFromExtension(ext);
+    } else if (ext instanceof x509.ExtendedKeyUsageExtension) {
+      extensions.extendedKeyUsage = ext.usages;
+    } else if (ext instanceof x509.SubjectAlternativeNameExtension) {
+      extensions.subjectAltName = ext.names.items.map(name => ({
+        type: name.type,
+        value: name.value
+      }));
+    } else {
+      extensions[ext.type] = { critical: ext.critical, value: ext.value };
+    }
+  }
+  return extensions;
+}
 
 const app = express();
 const PORT = process.env.PORT || 3000;
@@ -45,254 +328,66 @@ app.use('/api', apiLimiter);
 app.post('/api/generate', generateLimiter, async (req, res) => {
   try {
     const {
-      keyType,
-      keySize,
-      commonName,
-      organization,
-      organizationalUnit,
-      locality,
-      state,
-      country,
-      email,
-      subjectAltNames,
-      keyUsage,
-      extendedKeyUsage,
-      customExtensions,
-      password
+      keyType, keySize, commonName, organization, organizationalUnit,
+      locality, state, country, email, subjectAltNames, keyUsage, extendedKeyUsage, password
     } = req.body;
 
-    // Validate required fields
-    if (!commonName || !commonName.trim()) {
-      return res.status(400).json({ error: 'Common Name (CN) is required' });
-    }
+    // Validate inputs using helper functions
+    const validations = [
+      validateCommonName(commonName),
+      validateCountry(country),
+      validatePassword(password),
+      validateEmail(email)
+    ];
     
-    if (commonName.length > 64) {
-      return res.status(400).json({ error: 'Common Name must be 64 characters or less' });
-    }
-    
-    if (country && !/^[A-Z]{2}$/.test(country)) {
-      return res.status(400).json({ error: 'Country must be a 2-letter uppercase ISO code (e.g., US, GB)' });
-    }
-    
-    // Enhanced password validation
-    if (password) {
-      if (password.length < 8) {
-        return res.status(400).json({ error: 'Password must be at least 8 characters long' });
-      }
-      // Check for basic password strength
-      const hasUpperCase = /[A-Z]/.test(password);
-      const hasLowerCase = /[a-z]/.test(password);
-      const hasNumber = /[0-9]/.test(password);
-      const hasSpecialChar = /[!@#$%^&*(),.?":{}|<>]/.test(password);
-      
-      const strengthCount = [hasUpperCase, hasLowerCase, hasNumber, hasSpecialChar].filter(Boolean).length;
-      if (strengthCount < 3) {
-        return res.status(400).json({ 
-          error: 'Password must contain at least 3 of: uppercase letters, lowercase letters, numbers, special characters' 
-        });
+    for (const validation of validations) {
+      if (!validation.valid) {
+        return res.status(400).json({ error: validation.error });
       }
     }
-    
-    // Validate email format if provided
-    if (email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
-      return res.status(400).json({ error: 'Invalid email address format' });
+
+    // Validate SANs
+    const validSANs = (subjectAltNames || []).filter(san => san.value?.trim());
+    for (const san of validSANs) {
+      const sanValidation = validateSAN(san);
+      if (!sanValidation.valid) {
+        return res.status(400).json({ error: sanValidation.error });
+      }
     }
 
     // Generate key pair
-    let keys;
-    if (keyType === 'ECDSA') {
-      return res.status(400).json({ 
-        error: 'ECDSA key generation is not currently supported. Please use RSA.'
-      });
-    } else {
-      const bits = parseInt(keySize) || 2048;
-      keys = forge.pki.rsa.generateKeyPair({ bits });
-    }
-
-    // Create CSR
-    const csr = forge.pki.createCertificationRequest();
-    csr.publicKey = keys.publicKey;
-
-    // Set subject
-    const subject = [];
-    if (country) subject.push({ name: 'countryName', value: country });
-    if (state) subject.push({ name: 'stateOrProvinceName', value: state });
-    if (locality) subject.push({ name: 'localityName', value: locality });
-    if (organization) subject.push({ name: 'organizationName', value: organization });
-    if (organizationalUnit) subject.push({ name: 'organizationalUnitName', value: organizationalUnit });
-    subject.push({ name: 'commonName', value: commonName });
-    if (email) subject.push({ name: 'emailAddress', value: email });
+    const { keys, signingAlgorithm } = await generateKeyPair(keyType, keySize, req.body.curveName);
     
-    csr.setSubject(subject);
-
-    // Add extensions
-    const extensions = [];
-
-    // Key Usage
-    if (keyUsage && keyUsage.length > 0) {
-      const keyUsageExt = {
-        name: 'keyUsage',
-        critical: true,
-        digitalSignature: keyUsage.includes('digitalSignature'),
-        nonRepudiation: keyUsage.includes('nonRepudiation'),
-        keyEncipherment: keyUsage.includes('keyEncipherment'),
-        dataEncipherment: keyUsage.includes('dataEncipherment'),
-        keyAgreement: keyUsage.includes('keyAgreement'),
-        keyCertSign: keyUsage.includes('keyCertSign'),
-        cRLSign: keyUsage.includes('cRLSign'),
-        encipherOnly: keyUsage.includes('encipherOnly'),
-        decipherOnly: keyUsage.includes('decipherOnly')
-      };
-      extensions.push(keyUsageExt);
+    // Build subject DN
+    const subjectDN = buildSubjectDN({ country, state, locality, organization, organizationalUnit, commonName, email });
+    
+    // Build extensions
+    const csrExtensions = [];
+    if (keyUsage?.length > 0) {
+      csrExtensions.push(buildKeyUsageExtension(keyUsage));
     }
-
-    // Extended Key Usage
-    if (extendedKeyUsage && extendedKeyUsage.length > 0) {
-      // Map EKU selections to OIDs
-      const ekuOids = extendedKeyUsage.map(eku => {
-        if (eku.startsWith('1.') || eku.startsWith('2.')) {
-          return eku; // Custom OID
-        }
-        // Map common names to OIDs
-        const ekuMap = {
-          'serverAuth': '1.3.6.1.5.5.7.3.1',
-          'clientAuth': '1.3.6.1.5.5.7.3.2',
-          'codeSigning': '1.3.6.1.5.5.7.3.3',
-          'emailProtection': '1.3.6.1.5.5.7.3.4',
-          'timeStamping': '1.3.6.1.5.5.7.3.8',
-          'OCSPSigning': '1.3.6.1.5.5.7.3.9'
-        };
-        return ekuMap[eku] || eku;
-      });
-      
-      // Add proper EKU extension with mapped OIDs
-      const ekuExt = {
-        name: 'extKeyUsage',
-        critical: false
-      };
-      
-      // Add each EKU purpose
-      ekuOids.forEach((oid, index) => {
-        const purposeMap = {
-          '1.3.6.1.5.5.7.3.1': 'serverAuth',
-          '1.3.6.1.5.5.7.3.2': 'clientAuth',
-          '1.3.6.1.5.5.7.3.3': 'codeSigning',
-          '1.3.6.1.5.5.7.3.4': 'emailProtection',
-          '1.3.6.1.5.5.7.3.8': 'timeStamping',
-          '1.3.6.1.5.5.7.3.9': 'OCSPSigning'
-        };
-        const purpose = purposeMap[oid];
-        if (purpose) {
-          ekuExt[purpose] = true;
-        }
-      });
-      
-      extensions.push(ekuExt);
+    if (extendedKeyUsage?.length > 0) {
+      csrExtensions.push(buildExtendedKeyUsageExtension(extendedKeyUsage));
     }
-
-    // Subject Alternative Names
-    if (subjectAltNames && subjectAltNames.length > 0) {
-      const validSANs = subjectAltNames.filter(san => san.value && san.value.trim());
-      if (validSANs.length > 0) {
-        // Validate SAN values based on type
-        for (const san of validSANs) {
-          const value = san.value.trim();
-          if (san.type === 'DNS') {
-            // Basic DNS validation
-            if (!/^[a-zA-Z0-9]([a-zA-Z0-9-]*[a-zA-Z0-9])?(\.[a-zA-Z0-9]([a-zA-Z0-9-]*[a-zA-Z0-9])?)*$/.test(value)) {
-              return res.status(400).json({ error: `Invalid DNS name in SAN: ${value}` });
-            }
-          } else if (san.type === 'IP') {
-            // Basic IPv4/IPv6 validation
-            const ipv4 = /^(\d{1,3}\.){3}\d{1,3}$/;
-            const ipv6 = /^([0-9a-fA-F]{0,4}:){2,7}[0-9a-fA-F]{0,4}$/;
-            if (!ipv4.test(value) && !ipv6.test(value)) {
-              return res.status(400).json({ error: `Invalid IP address in SAN: ${value}` });
-            }
-          } else if (san.type === 'email') {
-            // Validate email
-            if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value)) {
-              return res.status(400).json({ error: `Invalid email in SAN: ${value}` });
-            }
-          } else if (san.type === 'URI') {
-            // Basic URI validation
-            try {
-              new URL(value);
-            } catch {
-              return res.status(400).json({ error: `Invalid URI in SAN: ${value}` });
-            }
-          }
-        }
-        
-        const sanExt = {
-          name: 'subjectAltName',
-          altNames: validSANs.map(san => {
-            if (san.type === 'DNS') {
-              return { type: 2, value: san.value.trim() };
-            } else if (san.type === 'IP') {
-              return { type: 7, ip: san.value.trim() };
-            } else if (san.type === 'email') {
-              return { type: 1, value: san.value.trim() };
-            } else if (san.type === 'URI') {
-              return { type: 6, value: san.value.trim() };
-            }
-            return { type: 2, value: san.value.trim() };
-          })
-        };
-        extensions.push(sanExt);
-      }
+    if (validSANs.length > 0) {
+      csrExtensions.push(buildSANExtension(validSANs));
     }
-
-    // Custom Extensions
-    if (customExtensions && customExtensions.length > 0) {
-      for (const ext of customExtensions) {
-        if (ext.oid && ext.value) {
-          // Validate OID format - must be dot-separated numbers, at least two components
-          if (!/^[0-9]+(\.[0-9]+)+$/.test(ext.oid)) {
-            return res.status(400).json({ 
-              error: `Invalid OID format: ${ext.oid}. Must be dot-separated numbers (e.g., "1.2.840.113549").` 
-            });
-          }
-          extensions.push({
-            id: ext.oid,
-            critical: ext.critical || false,
-            value: ext.value
-          });
-        }
-      }
-    }
-
-    csr.setAttributes([{
-      name: 'extensionRequest',
-      extensions: extensions
-    }]);
-
-    // Sign CSR
-    csr.sign(keys.privateKey, forge.md.sha256.create());
-
-    // Convert to PEM
-    const csrPem = forge.pki.certificationRequestToPem(csr);
-    let privateKeyPem;
-
-    if (password) {
-      // Encrypt private key with password
-      privateKeyPem = forge.pki.encryptRsaPrivateKey(keys.privateKey, password, {
-        algorithm: 'aes256'
-      });
-    } else {
-      privateKeyPem = forge.pki.privateKeyToPem(keys.privateKey);
-    }
-
-    res.json({
-      success: true,
-      csr: csrPem,
-      privateKey: privateKeyPem,
-      publicKey: forge.pki.publicKeyToPem(keys.publicKey)
+    
+    // Create CSR
+    const csr = await x509.Pkcs10CertificateRequestGenerator.create({
+      name: subjectDN,
+      keys: keys,
+      signingAlgorithm: signingAlgorithm,
+      extensions: csrExtensions
     });
+    
+    const csrPem = csr.toString('pem');
+    const { privateKeyPem, publicKeyPem } = await exportKeysToPem(keys, password);
+    
+    res.json({ success: true, csr: csrPem, privateKey: privateKeyPem, publicKey: publicKeyPem });
 
   } catch (error) {
     console.error('CSR Generation Error:', error);
-    // Don't expose internal error details to client in production
     const isDev = process.env.NODE_ENV === 'development';
     res.status(500).json({ 
       error: 'Failed to generate CSR',
@@ -310,68 +405,34 @@ app.post('/api/analyze', async (req, res) => {
       return res.status(400).json({ error: 'CSR is required' });
     }
 
-    // Parse CSR
-    const csrObj = forge.pki.certificationRequestFromPem(csr);
+    // Parse CSR using @peculiar/x509
+    const csrObj = new x509.Pkcs10CertificateRequest(csr);
     
-    // Extract subject
-    const subject = {};
-    csrObj.subject.attributes.forEach(attr => {
-      subject[attr.name] = attr.value;
-    });
-
-    // Extract public key info
-    const publicKey = csrObj.publicKey;
-    const keyInfo = {
-      type: publicKey.n ? 'RSA' : 'Unknown',
-      bits: publicKey.n ? publicKey.n.bitLength() : 0
-    };
-
-    // Extract extensions
-    const extensions = {};
-    const attrs = csrObj.getAttribute({ name: 'extensionRequest' });
-    
-    if (attrs && attrs.extensions) {
-      attrs.extensions.forEach(ext => {
-        if (ext.name === 'keyUsage') {
-          extensions.keyUsage = [];
-          if (ext.digitalSignature) extensions.keyUsage.push('digitalSignature');
-          if (ext.nonRepudiation) extensions.keyUsage.push('nonRepudiation');
-          if (ext.keyEncipherment) extensions.keyUsage.push('keyEncipherment');
-          if (ext.dataEncipherment) extensions.keyUsage.push('dataEncipherment');
-          if (ext.keyAgreement) extensions.keyUsage.push('keyAgreement');
-          if (ext.keyCertSign) extensions.keyUsage.push('keyCertSign');
-          if (ext.cRLSign) extensions.keyUsage.push('cRLSign');
-          if (ext.encipherOnly) extensions.keyUsage.push('encipherOnly');
-          if (ext.decipherOnly) extensions.keyUsage.push('decipherOnly');
-        } else if (ext.name === 'extKeyUsage') {
-          extensions.extendedKeyUsage = ext;
-        } else if (ext.name === 'subjectAltName') {
-          extensions.subjectAltName = ext.altNames.map(san => ({
-            type: san.type,
-            value: san.value || san.ip
-          }));
-        } else {
-          extensions[ext.name || ext.id] = ext;
-        }
-      });
-    }
+    // Extract subject, public key info, and extensions using helper functions
+    const subject = parseSubjectDN(csrObj.subject);
+    const keyInfo = extractPublicKeyInfo(csrObj.publicKey.algorithm);
+    const extensions = extractExtensions(csrObj.extensions);
 
     // Verify signature
-    const verified = csrObj.verify();
+    let verified = false;
+    try {
+      verified = await csrObj.verify();
+    } catch {
+      verified = false;
+    }
 
     res.json({
       success: true,
       subject,
       publicKey: keyInfo,
       extensions,
-      signatureAlgorithm: 'sha256WithRSAEncryption',
+      signatureAlgorithm: csrObj.signatureAlgorithm?.name || 'Unknown',
       verified,
       pem: csr
     });
 
   } catch (error) {
     console.error('CSR Analysis Error:', error);
-    // Don't expose internal error details to client in production
     const isDev = process.env.NODE_ENV === 'development';
     res.status(500).json({ 
       error: 'Failed to analyze CSR',
@@ -382,7 +443,7 @@ app.post('/api/analyze', async (req, res) => {
 
 // Health check
 app.get('/api/health', (req, res) => {
-  res.json({ status: 'ok', version: '1.0.0' });
+  res.json({ status: 'ok', version: '1.1.0' });
 });
 
 app.listen(PORT, () => {

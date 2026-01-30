@@ -21,6 +21,7 @@
         <div class="tabs">
             <button class="tab-button active" data-tab="generator">CSR Generator</button>
             <button class="tab-button" data-tab="analyzer">CSR Analyzer</button>
+            <button class="tab-button" data-tab="explanation">Explanation</button>
         </div>
 
         <!-- CSR Generator Tab -->
@@ -57,42 +58,9 @@
             </div>
 
             <form id="csrForm">
+                <div class="form-inline-sections">
                 <div class="section">
-                    <h2>2. Key Configuration</h2>
-                    <div class="form-row">
-                        <div class="form-group">
-                            <label for="keyType">Key Type</label>
-                            <select id="keyType" name="keyType">
-                                <option value="RSA">RSA</option>
-                                <option value="ECDSA" disabled>ECDSA (Coming Soon)</option>
-                            </select>
-                        </div>
-                        <div class="form-group" id="keySizeGroup">
-                            <label for="keySize">Key Size (bits)</label>
-                            <select id="keySize" name="keySize">
-                                <option value="2048">2048</option>
-                                <option value="3072">3072</option>
-                                <option value="4096">4096</option>
-                            </select>
-                        </div>
-                        <div class="form-group hidden" id="curveNameGroup">
-                            <label for="curveName">Curve</label>
-                            <select id="curveName" name="curveName">
-                                <option value="prime256v1">prime256v1 (P-256)</option>
-                                <option value="secp384r1">secp384r1 (P-384)</option>
-                                <option value="secp521r1">secp521r1 (P-521)</option>
-                            </select>
-                        </div>
-                    </div>
-                    <div class="form-group">
-                        <label for="password">Private Key Password (optional)</label>
-                        <input type="password" id="password" name="password" placeholder="Leave empty for unencrypted key" autocomplete="new-password" aria-describedby="passwordHelp">
-                        <small id="passwordHelp">Recommended: Use a strong password (16+ characters or a long passphrase, ideally stored in a password manager) to protect your private key</small>
-                    </div>
-                </div>
-
-                <div class="section">
-                    <h2>3. Subject Information</h2>
+                    <h2>2. Subject Information</h2>
                     <div class="form-group">
                         <label for="commonName">Common Name (CN) <span class="required">*</span></label>
                         <input type="text" id="commonName" name="commonName" placeholder="example.com or John Doe" required>
@@ -129,8 +97,9 @@
                     </div>
                 </div>
 
+                <div class="right-column">
                 <div class="section">
-                    <h2>4. Subject Alternative Names (SAN)</h2>
+                    <h2>3. Subject Alternative Names (SAN)</h2>
                     <div id="sanContainer">
                         <div class="san-entry">
                             <select class="san-type">
@@ -146,6 +115,43 @@
                     <button type="button" class="btn-secondary" id="addSanBtn">+ Add SAN</button>
                 </div>
 
+                <div class="section">
+                    <h2>4. Key Configuration</h2>
+                    <div class="form-row">
+                        <div class="form-group">
+                            <label for="keyType">Key Type</label>
+                            <select id="keyType" name="keyType">
+                                <option value="RSA">RSA</option>
+                                <option value="ECDSA">ECDSA</option>
+                            </select>
+                        </div>
+                        <div class="form-group" id="keySizeGroup">
+                            <label for="keySize">Key Size (bits)</label>
+                            <select id="keySize" name="keySize">
+                                <option value="2048">2048</option>
+                                <option value="3072">3072</option>
+                                <option value="4096">4096</option>
+                            </select>
+                        </div>
+                        <div class="form-group hidden" id="curveNameGroup">
+                            <label for="curveName">Curve</label>
+                            <select id="curveName" name="curveName">
+                                <option value="prime256v1">prime256v1 (P-256)</option>
+                                <option value="secp384r1">secp384r1 (P-384)</option>
+                                <option value="secp521r1">secp521r1 (P-521)</option>
+                            </select>
+                        </div>
+                    </div>
+                    <div class="form-group">
+                        <label for="password">Private Key Password (optional)</label>
+                        <input type="password" id="password" name="password" placeholder="Leave empty for unencrypted key" autocomplete="new-password" aria-describedby="passwordHelp">
+                        <small id="passwordHelp">Recommended: Use a strong password (16+ characters or a long passphrase, ideally stored in a password manager) to protect your private key</small>
+                    </div>
+                </div>
+                </div>
+                </div>
+
+                <div class="two-column-wrapper">
                 <div class="section">
                     <h2>5. Key Usage</h2>
                     <div class="checkbox-grid">
@@ -295,8 +301,9 @@
                         <div id="customEKUList"></div>
                     </div>
                 </div>
+                </div>
 
-                <div class="section">
+                <div class="section submit-section">
                     <button type="submit" class="btn-primary">Generate CSR</button>
                 </div>
             </form>
@@ -338,10 +345,187 @@
                 <div id="analysisContent"></div>
             </div>
         </div>
+
+        <!-- Explanation Tab -->
+        <div id="explanation" class="tab-content">
+            <div class="section">
+                <h2>What is a Certificate Signing Request (CSR)?</h2>
+                <p>A <strong>Certificate Signing Request (CSR)</strong> is a block of encoded text that contains information about the entity requesting a digital certificate, along with the public key that will be included in the certificate. The CSR is submitted to a Certificate Authority (CA), which uses the information to create an X.509 digital certificate.</p>
+                <p>The CSR is typically generated on the same server or system where the certificate will be installed, ensuring the private key never leaves the system.</p>
+            </div>
+
+            <div class="section">
+                <h2>Subject Information Fields</h2>
+                <div class="explanation-grid">
+                    <div class="explanation-item">
+                        <h3>Common Name (CN)</h3>
+                        <p>The fully qualified domain name (FQDN) for web server certificates (e.g., <code>www.example.com</code>) or the person's name for personal certificates. This is the primary identifier in the certificate.</p>
+                    </div>
+                    <div class="explanation-item">
+                        <h3>Organization (O)</h3>
+                        <p>The legal name of your organization or company. For EV and OV certificates, this must match official registration documents.</p>
+                    </div>
+                    <div class="explanation-item">
+                        <h3>Organizational Unit (OU)</h3>
+                        <p>A department or division within your organization (e.g., "IT Department", "Security Team"). This field is optional and often omitted in modern certificates.</p>
+                    </div>
+                    <div class="explanation-item">
+                        <h3>Locality (L)</h3>
+                        <p>The city or locality where your organization is located (e.g., "San Francisco", "London").</p>
+                    </div>
+                    <div class="explanation-item">
+                        <h3>State/Province (ST)</h3>
+                        <p>The state, province, or region where your organization is located. Use the full name, not abbreviations (e.g., "California" not "CA").</p>
+                    </div>
+                    <div class="explanation-item">
+                        <h3>Country (C)</h3>
+                        <p>The two-letter ISO 3166-1 country code (e.g., "US" for United States, "DE" for Germany, "GB" for United Kingdom).</p>
+                    </div>
+                    <div class="explanation-item">
+                        <h3>Email Address</h3>
+                        <p>Contact email address. Commonly used in S/MIME email certificates. For web server certificates, this is typically omitted.</p>
+                    </div>
+                </div>
+            </div>
+
+            <div class="section">
+                <h2>Subject Alternative Names (SAN)</h2>
+                <p>SANs allow a single certificate to secure multiple domains, subdomains, IP addresses, or email addresses. Modern browsers require the domain to be listed in the SAN extension, not just the Common Name.</p>
+                <div class="explanation-grid">
+                    <div class="explanation-item">
+                        <h3>DNS</h3>
+                        <p>Domain names the certificate should be valid for. Use wildcards (<code>*.example.com</code>) to cover all subdomains at one level.</p>
+                    </div>
+                    <div class="explanation-item">
+                        <h3>IP Address</h3>
+                        <p>IPv4 or IPv6 addresses. Useful for internal services accessed by IP rather than hostname.</p>
+                    </div>
+                    <div class="explanation-item">
+                        <h3>Email</h3>
+                        <p>Email addresses for S/MIME certificates. Allows the certificate to be used for signing and encrypting emails.</p>
+                    </div>
+                    <div class="explanation-item">
+                        <h3>URI</h3>
+                        <p>Uniform Resource Identifiers. Less common, used for specialized applications and services.</p>
+                    </div>
+                </div>
+            </div>
+
+            <div class="section">
+                <h2>Key Configuration</h2>
+                <div class="explanation-grid">
+                    <div class="explanation-item">
+                        <h3>RSA Keys</h3>
+                        <p>The most widely supported key type. Key sizes:</p>
+                        <ul>
+                            <li><strong>2048-bit:</strong> Minimum recommended, widely compatible</li>
+                            <li><strong>3072-bit:</strong> Good balance of security and performance</li>
+                            <li><strong>4096-bit:</strong> Maximum security, slightly slower operations</li>
+                        </ul>
+                    </div>
+                    <div class="explanation-item">
+                        <h3>ECDSA Keys</h3>
+                        <p>Elliptic Curve keys offer equivalent security with smaller key sizes:</p>
+                        <ul>
+                            <li><strong>P-256:</strong> Equivalent to RSA 3072-bit</li>
+                            <li><strong>P-384:</strong> Equivalent to RSA 7680-bit</li>
+                            <li><strong>P-521:</strong> Equivalent to RSA 15360-bit</li>
+                        </ul>
+                    </div>
+                    <div class="explanation-item">
+                        <h3>Private Key Password</h3>
+                        <p>Encrypts the private key with AES-256. A password-protected key requires the password each time the key is used (e.g., when starting a web server).</p>
+                    </div>
+                </div>
+            </div>
+
+            <div class="section">
+                <h2>Key Usage</h2>
+                <p>Key Usage extensions define the cryptographic operations the certificate's key can perform:</p>
+                <div class="explanation-grid">
+                    <div class="explanation-item">
+                        <h3>Digital Signature</h3>
+                        <p>Allows the key to create digital signatures for authentication and data integrity. Essential for TLS/SSL.</p>
+                    </div>
+                    <div class="explanation-item">
+                        <h3>Non-Repudiation</h3>
+                        <p>Used for signatures that provide proof of origin that cannot be denied. Common in document signing.</p>
+                    </div>
+                    <div class="explanation-item">
+                        <h3>Key Encipherment</h3>
+                        <p>Allows the key to encrypt other keys. Required for RSA key exchange in TLS (non-ECDHE cipher suites).</p>
+                    </div>
+                    <div class="explanation-item">
+                        <h3>Data Encipherment</h3>
+                        <p>Allows direct encryption of user data (not keys). Rarely used in practice.</p>
+                    </div>
+                    <div class="explanation-item">
+                        <h3>Key Agreement</h3>
+                        <p>Allows the key to participate in key agreement protocols like Diffie-Hellman.</p>
+                    </div>
+                    <div class="explanation-item">
+                        <h3>Key Certificate Sign</h3>
+                        <p>Allows the key to sign other certificates. Only used for Certificate Authority (CA) certificates.</p>
+                    </div>
+                    <div class="explanation-item">
+                        <h3>CRL Sign</h3>
+                        <p>Allows the key to sign Certificate Revocation Lists. Typically only for CA certificates.</p>
+                    </div>
+                    <div class="explanation-item">
+                        <h3>Encipher Only / Decipher Only</h3>
+                        <p>Used with Key Agreement to restrict operations to encryption or decryption only.</p>
+                    </div>
+                </div>
+            </div>
+
+            <div class="section">
+                <h2>Extended Key Usage (EKU)</h2>
+                <p>EKU extensions specify the purposes for which the certificate can be used:</p>
+                <div class="explanation-grid">
+                    <div class="explanation-item">
+                        <h3>TLS Web Server Authentication</h3>
+                        <p><code>1.3.6.1.5.5.7.3.1</code> - The certificate can be used to authenticate a web server (HTTPS).</p>
+                    </div>
+                    <div class="explanation-item">
+                        <h3>TLS Web Client Authentication</h3>
+                        <p><code>1.3.6.1.5.5.7.3.2</code> - The certificate can authenticate a client to a server (mutual TLS).</p>
+                    </div>
+                    <div class="explanation-item">
+                        <h3>Code Signing</h3>
+                        <p><code>1.3.6.1.5.5.7.3.3</code> - The certificate can sign executable code and scripts.</p>
+                    </div>
+                    <div class="explanation-item">
+                        <h3>Email Protection (S/MIME)</h3>
+                        <p><code>1.3.6.1.5.5.7.3.4</code> - The certificate can sign and encrypt email messages.</p>
+                    </div>
+                    <div class="explanation-item">
+                        <h3>Time Stamping</h3>
+                        <p><code>1.3.6.1.5.5.7.3.8</code> - The certificate can provide trusted timestamps for documents.</p>
+                    </div>
+                    <div class="explanation-item">
+                        <h3>OCSP Signing</h3>
+                        <p><code>1.3.6.1.5.5.7.3.9</code> - The certificate can sign OCSP (Online Certificate Status Protocol) responses.</p>
+                    </div>
+                </div>
+            </div>
+
+            <div class="section">
+                <h2>Security Best Practices</h2>
+                <ul class="best-practices-list">
+                    <li><strong>Never share your private key.</strong> The private key should remain on the server where the CSR was generated.</li>
+                    <li><strong>Use at least 2048-bit RSA keys</strong> (3072-bit or 4096-bit recommended for long-term certificates).</li>
+                    <li><strong>Protect private keys with strong passwords</strong> when storing them, especially on shared systems.</li>
+                    <li><strong>Include all domain names in SANs.</strong> Modern browsers check SANs, not just the Common Name.</li>
+                    <li><strong>Verify your CSR before submission</strong> using the Analyzer tab to ensure all information is correct.</li>
+                    <li><strong>Keep backups of your private keys</strong> in secure, encrypted storage.</li>
+                    <li><strong>Use appropriate validity periods.</strong> Shorter validity periods (1 year or less) are more secure.</li>
+                </ul>
+            </div>
+        </div>
     </div>
 
     <footer>
-        <p>CSR Generator v1.0 | Secure, Open Source, Self-Hosted</p>
+        <p>CSR Generator v1.1 | Secure, Open Source, Self-Hosted</p>
         <p><small>Private keys are generated securely and never stored on the server</small></p>
     </footer>
 

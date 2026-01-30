@@ -14,8 +14,7 @@ COPY healthcheck.js ./
 COPY public ./public
 
 # Create and use a non-root user for security
-RUN addgroup -g 1001 -S nodejs && adduser -S -G nodejs -u 1001 nodejs
-RUN chown -R nodejs:nodejs /app
+RUN addgroup -g 1001 -S nodejs && adduser -S -G nodejs -u 1001 nodejs && chown -R nodejs:nodejs /app
 USER nodejs
 
 # Expose port

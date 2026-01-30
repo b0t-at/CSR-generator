@@ -119,7 +119,7 @@ function addCustomEKU() {
     if (!oid) return;
     
     // Validate OID format: numeric components separated by dots, no leading/trailing/consecutive dots, at least two components
-    if (!/^[0-9]+(\.[0-9]+)+$/.test(oid)) {
+    if (!/^\d+(\.\d+)+$/.test(oid)) {
         showError('Invalid OID format. Use format like 1.2.3.4.5 (dot-separated numbers, at least two components)');
         return;
     }
@@ -265,12 +265,12 @@ function download(content, filename, contentType) {
     a.download = filename;
     document.body.appendChild(a);
     a.click();
-    document.body.removeChild(a);
+    a.remove();
     URL.revokeObjectURL(url);
 }
 
 function sanitizeFilename(name) {
-    return name.replace(/[^a-z0-9]/gi, '_').toLowerCase();
+    return name.replaceAll(/[^a-z0-9]/gi, '_').toLowerCase();
 }
 
 function copyToClipboard(elementId, buttonElement) {
@@ -281,49 +281,15 @@ function copyToClipboard(elementId, buttonElement) {
     }
     const text = element.value;
     
-    // Use modern Clipboard API when available
+    // Use modern Clipboard API (supported in all modern browsers)
     if (navigator.clipboard && typeof navigator.clipboard.writeText === 'function') {
         navigator.clipboard.writeText(text).then(() => {
             showCopyFeedback(buttonElement);
-        }).catch(err => {
-            // Clipboard API is available but failed (e.g., permissions, insecure context).
-            const fallbackSucceeded = fallbackCopy(element, buttonElement);
-            if (!fallbackSucceeded) {
-                showError('Your browser blocked automatic copying. Please copy the text manually (for example, select it and press Ctrl/Cmd+C).');
-            }
+        }).catch(() => {
+            showError('Your browser blocked automatic copying. Please copy the text manually (select it and press Ctrl/Cmd+C).');
         });
     } else {
-        // Clipboard API not available; try deprecated fallback for older browsers.
-        const fallbackSucceeded = fallbackCopy(element, buttonElement);
-        if (!fallbackSucceeded) {
-            showError('Your browser does not support automatic copying. Please copy the text manually (for example, select it and press Ctrl/Cmd+C).');
-        }
-    }
-}
-
-function fallbackCopy(element, buttonElement) {
-    if (!element) {
-        return false;
-    }
-    try {
-        // If queryCommandSupported is available, check whether "copy" is supported.
-        if (typeof document.queryCommandSupported === 'function' &&
-            !document.queryCommandSupported('copy')) {
-            return false;
-        }
-        if (typeof document.execCommand !== 'function') {
-            return false;
-        }
-
-        element.select();
-        const success = document.execCommand('copy');
-        if (success) {
-            showCopyFeedback(buttonElement);
-            return true;
-        }
-        return false;
-    } catch (err) {
-        return false;
+        showError('Your browser does not support automatic copying. Please copy the text manually (select it and press Ctrl/Cmd+C).');
     }
 }
 
@@ -407,26 +373,28 @@ function displayAnalysis(data) {
         <strong>Signature Verification:</strong> ${data.verified ? '✓ Valid' : '✗ Invalid'}
     </div>`;
     
+    // Three-column grid for analysis sections
+    html += '<div class="analysis-grid">';
+    
     // Subject information
     html += `<div class="analysis-section">
         <h3>Subject Information</h3>
-        <table class="analysis-table">
-            <tr><th>Field</th><th>Value</th></tr>`;
+        <dl class="info-list">`;
     
     for (const [key, value] of Object.entries(data.subject)) {
-        html += `<tr><td>${formatFieldName(key)}</td><td><code>${value}</code></td></tr>`;
+        html += `<div class="info-item"><dt>${formatFieldName(key)}</dt><dd><code>${value}</code></dd></div>`;
     }
     
-    html += `</table></div>`;
+    html += `</dl></div>`;
     
     // Public Key
     html += `<div class="analysis-section">
         <h3>Public Key Information</h3>
-        <table class="analysis-table">
-            <tr><td>Algorithm</td><td><code>${data.publicKey.type}</code></td></tr>
-            <tr><td>Key Size</td><td><code>${data.publicKey.bits} bits</code></td></tr>
-            <tr><td>Signature Algorithm</td><td><code>${data.signatureAlgorithm}</code></td></tr>
-        </table>
+        <dl class="info-list">
+            <div class="info-item"><dt>Algorithm</dt><dd><code>${data.publicKey.type}</code></dd></div>
+            <div class="info-item"><dt>Key Size</dt><dd><code>${data.publicKey.bits} bits</code></dd></div>
+            <div class="info-item"><dt>Signature Algorithm</dt><dd><code>${data.signatureAlgorithm}</code></dd></div>
+        </dl>
     </div>`;
     
     // Extensions
@@ -445,7 +413,22 @@ function displayAnalysis(data) {
         
         // Extended Key Usage
         if (data.extensions.extendedKeyUsage) {
-            html += `<h4>Extended Key Usage</h4><pre>${JSON.stringify(data.extensions.extendedKeyUsage, null, 2)}</pre>`;
+            html += `<h4>Extended Key Usage</h4><div class="eku-list">`;
+            const ekuNames = {
+                '1.3.6.1.5.5.7.3.1': 'TLS Web Server Authentication',
+                '1.3.6.1.5.5.7.3.2': 'TLS Web Client Authentication',
+                '1.3.6.1.5.5.7.3.3': 'Code Signing',
+                '1.3.6.1.5.5.7.3.4': 'Email Protection',
+                '1.3.6.1.5.5.7.3.8': 'Time Stamping',
+                '1.3.6.1.5.5.7.3.9': 'OCSP Signing',
+                '1.3.6.1.4.1.311.10.3.3': 'Microsoft Server Gated Crypto',
+                '2.16.840.1.113730.4.1': 'Netscape Server Gated Crypto'
+            };
+            data.extensions.extendedKeyUsage.forEach(eku => {
+                const name = ekuNames[eku] || 'Custom OID';
+                html += `<div class="eku-item"><span class="eku-name">${name}</span><span class="eku-oid">${eku}</span></div>`;
+            });
+            html += `</div>`;
         }
         
         // Subject Alternative Names
@@ -453,13 +436,15 @@ function displayAnalysis(data) {
             html += `<h4>Subject Alternative Names</h4><ul>`;
             data.extensions.subjectAltName.forEach(san => {
                 const typeNames = { 1: 'Email', 2: 'DNS', 6: 'URI', 7: 'IP' };
-                html += `<li>${typeNames[san.type] || 'Type ' + san.type}: <code>${san.value}</code></li>`;
+                html += `<li><strong>${typeNames[san.type] || 'Type ' + san.type}:</strong> <code>${san.value}</code></li>`;
             });
             html += `</ul>`;
         }
         
         html += `</div>`;
     }
+    
+    html += '</div>'; // Close analysis-grid
     
     document.getElementById('analysisContent').innerHTML = html;
     resultDiv.scrollIntoView({ behavior: 'smooth' });
@@ -468,8 +453,8 @@ function displayAnalysis(data) {
 function formatFieldName(name) {
     // Convert camelCase or snake_case to Title Case
     return name
-        .replace(/([A-Z])/g, ' $1')
-        .replace(/_/g, ' ')
+        .replaceAll(/([A-Z])/g, ' $1')
+        .replaceAll('_', ' ')
         .replace(/^./, str => str.toUpperCase())
         .trim();
 }
@@ -505,21 +490,21 @@ document.querySelectorAll('#sanContainer .btn-remove-san').forEach(btn => {
 function initTheme() {
     const savedTheme = localStorage.getItem('theme');
     if (savedTheme) {
-        document.documentElement.setAttribute('data-theme', savedTheme);
+        document.documentElement.dataset.theme = savedTheme;
         updateThemeIcon(savedTheme);
     }
     // Default is dark (no data-theme attribute = dark mode from CSS :root)
 }
 
 function toggleTheme() {
-    const currentTheme = document.documentElement.getAttribute('data-theme');
+    const currentTheme = document.documentElement.dataset.theme;
     const newTheme = currentTheme === 'light' ? null : 'light';
     
     if (newTheme) {
-        document.documentElement.setAttribute('data-theme', newTheme);
+        document.documentElement.dataset.theme = newTheme;
         localStorage.setItem('theme', newTheme);
     } else {
-        document.documentElement.removeAttribute('data-theme');
+        delete document.documentElement.dataset.theme;
         localStorage.setItem('theme', 'dark');
     }
     updateThemeIcon(newTheme || 'dark');
