@@ -1,0 +1,99 @@
+name: PR Check
+
+on:
+  pull_request:
+    branches:
+      - main
+
+jobs:
+  build-and-test:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '18'
+          cache: 'npm'
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Run tests
+        run: npm test
+
+      - name: Verify server starts
+        id: server-check
+        run: |
+          timeout 10 node server.js &
+          SERVER_PID=$!
+          sleep 3
+          HEALTH_RESPONSE=$(curl -s http://localhost:3000/api/health)
+          echo "health_response=$HEALTH_RESPONSE" >> $GITHUB_OUTPUT
+          curl -f http://localhost:3000/api/health || exit 1
+          kill $SERVER_PID 2>/dev/null || true
+
+      - name: Generate summary
+        if: always()
+        run: |
+          echo "## 🔍 PR Check Results" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "### 📦 Build & Test" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "| Check | Status |" >> $GITHUB_STEP_SUMMARY
+          echo "|-------|--------|" >> $GITHUB_STEP_SUMMARY
+          echo "| Node.js Version | 18 |" >> $GITHUB_STEP_SUMMARY
+          echo "| Dependencies | ✅ Installed |" >> $GITHUB_STEP_SUMMARY
+          echo "| Tests | ${{ job.status == 'success' && '✅ Passed' || '❌ Failed' }} |" >> $GITHUB_STEP_SUMMARY
+          echo "| Server Health | ${{ steps.server-check.outputs.health_response || 'N/A' }} |" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "### 📋 Details" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "- **Commit:** \`${{ github.sha }}\`" >> $GITHUB_STEP_SUMMARY
+          echo "- **Branch:** \`${{ github.head_ref }}\`" >> $GITHUB_STEP_SUMMARY
+          echo "- **PR:** #${{ github.event.pull_request.number }}" >> $GITHUB_STEP_SUMMARY
+
+  build-container:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Build Docker image
+        id: docker-build
+        uses: docker/build-push-action@v5
+        with:
+          context: .
+          push: false
+          tags: csr-generator:test
+          outputs: type=docker,dest=/tmp/image.tar
+
+      - name: Get image size
+        id: image-size
+        run: |
+          SIZE=$(ls -lh /tmp/image.tar | awk '{print $5}')
+          echo "size=$SIZE" >> $GITHUB_OUTPUT
+
+      - name: Generate summary
+        if: always()
+        run: |
+          echo "## 🐳 Container Build Results" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "### Docker Image" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "| Property | Value |" >> $GITHUB_STEP_SUMMARY
+          echo "|----------|-------|" >> $GITHUB_STEP_SUMMARY
+          echo "| Image Tag | \`csr-generator:test\` |" >> $GITHUB_STEP_SUMMARY
+          echo "| Build Status | ${{ job.status == 'success' && '✅ Success' || '❌ Failed' }} |" >> $GITHUB_STEP_SUMMARY
+          echo "| Image Size | ${{ steps.image-size.outputs.size || 'N/A' }} |" >> $GITHUB_STEP_SUMMARY
+          echo "| Base Image | \`node:18-alpine\` |" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "### 📋 Build Info" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "- **Commit:** \`${{ github.sha }}\`" >> $GITHUB_STEP_SUMMARY
+          echo "- **Digest:** \`${{ steps.docker-build.outputs.digest || 'N/A' }}\`" >> $GITHUB_STEP_SUMMARY
