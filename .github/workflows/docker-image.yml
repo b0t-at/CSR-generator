@@ -12,6 +12,10 @@ on:
       - '.editorconfig'
       - 'docs/**'
 
+permissions:
+  contents: read
+  packages: write
+
 env:
   IMAGE_BASE_TAG: ${{ vars.registry_uri }}/b0t-at-public/csr-generator
 

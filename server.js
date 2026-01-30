@@ -51,35 +51,81 @@ function validatePassword(password) {
 }
 
 function validateEmail(email) {
-  if (email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+  if (!email) return { valid: true };
+  // Limit length to prevent ReDoS and use atomic-like pattern
+  if (email.length > 254) {
+    return { valid: false, error: 'Email address too long' };
+  }
+  // Simple email validation: local@domain format with length limits
+  const atIndex = email.indexOf('@');
+  if (atIndex < 1 || atIndex > 64) {
+    return { valid: false, error: 'Invalid email address format' };
+  }
+  const local = email.slice(0, atIndex);
+  const domain = email.slice(atIndex + 1);
+  if (!local || !domain || domain.indexOf('.') < 1 || /\s/.test(email)) {
     return { valid: false, error: 'Invalid email address format' };
   }
   return { valid: true };
 }
 
+function validateDNSName(value) {
+  if (value.length > 253 || value.length < 1) {
+    return false;
+  }
+  const labels = value.split('.');
+  for (const label of labels) {
+    if (label.length === 0 || label.length > 63) {
+      return false;
+    }
+    // Allow wildcard only as first character of first label
+    if (label === '*' && labels.indexOf(label) === 0) {
+      continue;
+    }
+    if (!/^[a-zA-Z0-9]([a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?$/.test(label) && !/^[a-zA-Z0-9]$/.test(label)) {
+      return false;
+    }
+  }
+  return true;
+}
+
+function validateIPAddress(value) {
+  const ipv4 = /^(\d{1,3}\.){3}\d{1,3}$/;
+  const ipv6 = /^([0-9a-fA-F]{0,4}:){2,7}[0-9a-fA-F]{0,4}$/;
+  return ipv4.test(value) || ipv6.test(value);
+}
+
+function validateEmailFormat(value) {
+  if (value.length > 254) return false;
+  const atIndex = value.indexOf('@');
+  if (atIndex < 1) return false;
+  const domain = value.slice(atIndex + 1);
+  return domain && domain.indexOf('.') >= 1 && !/\s/.test(value);
+}
+
+function validateURI(value) {
+  try {
+    new URL(value);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
 function validateSAN(san) {
   const value = san.value.trim();
   
-  if (san.type === 'DNS') {
-    if (!/^[a-zA-Z0-9*]([a-zA-Z0-9-]*[a-zA-Z0-9])?(\.[a-zA-Z0-9]([a-zA-Z0-9-]*[a-zA-Z0-9])?)*$/.test(value)) {
-      return { valid: false, error: `Invalid DNS name in SAN: ${value}` };
-    }
-  } else if (san.type === 'IP') {
-    const ipv4 = /^(\d{1,3}\.){3}\d{1,3}$/;
-    const ipv6 = /^([0-9a-fA-F]{0,4}:){2,7}[0-9a-fA-F]{0,4}$/;
-    if (!ipv4.test(value) && !ipv6.test(value)) {
-      return { valid: false, error: `Invalid IP address in SAN: ${value}` };
-    }
-  } else if (san.type === 'email') {
-    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value)) {
-      return { valid: false, error: `Invalid email in SAN: ${value}` };
-    }
-  } else if (san.type === 'URI') {
-    try { 
-      new URL(value); 
-    } catch { 
-      return { valid: false, error: `Invalid URI in SAN: ${value}` }; 
-    }
+  if (san.type === 'DNS' && !validateDNSName(value)) {
+    return { valid: false, error: `Invalid DNS name in SAN: ${value}` };
+  }
+  if (san.type === 'IP' && !validateIPAddress(value)) {
+    return { valid: false, error: `Invalid IP address in SAN: ${value}` };
+  }
+  if (san.type === 'email' && !validateEmailFormat(value)) {
+    return { valid: false, error: `Invalid email in SAN: ${value}` };
+  }
+  if (san.type === 'URI' && !validateURI(value)) {
+    return { valid: false, error: `Invalid URI in SAN: ${value}` };
   }
   return { valid: true };
 }
