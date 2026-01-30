@@ -14,7 +14,7 @@ A simple yet powerful web-based Certificate Signing Request (CSR) generation too
 
 - **Key Generation**:
   - RSA keys (2048, 3072, 4096 bits)
-  - ECDSA/Elliptic Curve support (planned for future release)
+  - ECDSA/Elliptic Curve support (p256, p384, p521)
   - Password-protected private keys (AES-256 encryption; minimum 8 characters with complexity requirements, but 16+ characters or a long passphrase strongly recommended)
 
 - **Complete X.509 Field Support**:
@@ -221,7 +221,7 @@ Response:
 
 ### Supported Key Algorithms
 - RSA (2048, 3072, 4096 bits)
-- ECDSA (planned for future release)
+- ECDSA (p256, p384, p521)
 
 ### Supported Extensions
 - Key Usage (RFC 5280 §4.2.1.3)
