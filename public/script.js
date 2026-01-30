@@ -500,3 +500,38 @@ document.querySelectorAll('#sanContainer .btn-remove-san').forEach(btn => {
         removeSAN(this);
     });
 });
+
+// Theme toggle functionality
+function initTheme() {
+    const savedTheme = localStorage.getItem('theme');
+    if (savedTheme) {
+        document.documentElement.setAttribute('data-theme', savedTheme);
+        updateThemeIcon(savedTheme);
+    }
+    // Default is dark (no data-theme attribute = dark mode from CSS :root)
+}
+
+function toggleTheme() {
+    const currentTheme = document.documentElement.getAttribute('data-theme');
+    const newTheme = currentTheme === 'light' ? null : 'light';
+    
+    if (newTheme) {
+        document.documentElement.setAttribute('data-theme', newTheme);
+        localStorage.setItem('theme', newTheme);
+    } else {
+        document.documentElement.removeAttribute('data-theme');
+        localStorage.setItem('theme', 'dark');
+    }
+    updateThemeIcon(newTheme || 'dark');
+}
+
+function updateThemeIcon(theme) {
+    const icon = document.querySelector('.theme-icon');
+    if (icon) {
+        icon.textContent = theme === 'light' ? '🌙' : '☀️';
+    }
+}
+
+// Initialize theme and attach toggle listener
+initTheme();
+document.getElementById('themeToggle').addEventListener('click', toggleTheme);
