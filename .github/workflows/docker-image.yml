@@ -40,7 +40,7 @@ jobs:
 
       - name: Build and push Docker image
         id: docker-build
-        uses: docker/build-push-action@v6
+        uses: docker/build-push-action@v7
         with:
           push: true
           tags: ${{ env.IMAGE_BASE_TAG }}:latest,${{ env.IMAGE_BASE_TAG }}:${{ github.sha }}
