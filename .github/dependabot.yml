@@ -12,6 +12,22 @@ updates:
     labels:
       - "dependencies"
       - "npm"
+    # New releases mature before a PR is opened; security updates bypass
+    # the cooldown automatically.
+    cooldown:
+      default-days: 7
+      semver-major-days: 30
+      semver-minor-days: 7
+      semver-patch-days: 3
+    groups:
+      # Minor and patch updates arrive as one batch; majors stay individual
+      # PRs so breaking changes get reviewed in isolation.
+      npm-minor-patch:
+        patterns:
+          - "*"
+        update-types:
+          - "minor"
+          - "patch"
 
   # Docker base image
   - package-ecosystem: "docker"
@@ -25,6 +41,12 @@ updates:
     labels:
       - "dependencies"
       - "docker"
+    cooldown:
+      default-days: 14
+    groups:
+      docker:
+        patterns:
+          - "*"
 
   # GitHub Actions
   - package-ecosystem: "github-actions"
@@ -38,3 +60,9 @@ updates:
     labels:
       - "dependencies"
       - "github-actions"
+    cooldown:
+      default-days: 14
+    groups:
+      github-actions:
+        patterns:
+          - "*"
