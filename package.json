@@ -22,10 +22,10 @@
   "author": "",
   "license": "MIT",
   "dependencies": {
-    "@peculiar/x509": "^2.0.0",
+    "@peculiar/x509": "^2.1.0",
     "cors": "^2.8.6",
-    "express": "^5.2.1",
-    "express-rate-limit": "^8.7.0",
+    "express": "^5.3.0",
+    "express-rate-limit": "^8.7.1",
     "reflect-metadata": "^0.2.2"
   },
   "devDependencies": {
